@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
 
 #ifdef USERPROG
 #include "userprog/process.h"
@@ -27,6 +28,8 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
+
+static struct list sleeping_list;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -102,6 +105,7 @@ void thread_init(void) {
 
     lock_init(&tid_lock);
     list_init(&ready_list);
+    list_init(&sleeping_list);
     list_init(&all_list);
 
     /* Set up a thread structure for the running thread. */
@@ -207,6 +211,30 @@ tid_t thread_create(const char *name, int priority,
     return tid;
 }
 
+bool compare_wakeup_time(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+    struct thread *ta = list_entry(a, struct thread, elem);
+    struct thread *tb = list_entry(b, struct thread, elem);
+    return ta->wakeup_time < tb->wakeup_time;
+}
+
+void thread_sleep(struct thread *t, int64_t ticks) {
+    int64_t now = timer_ticks();
+    t->wakeup_time = now + ticks;
+    list_insert_ordered(&sleeping_list, &t->elem, &compare_wakeup_time, NULL);
+}
+
+void thread_wakeup_all(void){
+    struct thread *popped;
+    while(!list_empty(&sleeping_list)){
+        popped = list_entry(list_front(&sleeping_list), struct thread, elem);
+        if(popped->wakeup_time>timer_ticks()){
+            break;
+        }
+        list_pop_front(&sleeping_list);
+        thread_unblock(popped);
+    }
+}
+
 /* Puts the current thread to sleep.  It will not be scheduled
    again until awoken by thread_unblock().
 
@@ -241,17 +269,19 @@ void thread_unblock(struct thread *t) {
     intr_set_level(old_level);
 }
 
+bool is_idle_thread(struct thread *t) {
+    return t == idle_thread;
+}
+
 /* Returns the name of the running thread. */
-const char *
-thread_name(void) {
+const char *thread_name(void) {
     return thread_current()->name;
 }
 
 /* Returns the running thread.
    This is running_thread() plus a couple of sanity checks.
    See the big comment at the top of thread.h for details. */
-struct thread *
-thread_current(void) {
+struct thread *thread_current(void) {
     struct thread *t = running_thread();
 
     /* Make sure T is really a thread.

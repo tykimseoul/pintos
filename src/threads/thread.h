@@ -87,6 +87,7 @@ struct thread {
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
+    int64_t wakeup_time;                /* time to wake up */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -147,5 +148,11 @@ void thread_set_nice(int);
 int thread_get_recent_cpu(void);
 
 int thread_get_load_avg(void);
+
+void thread_wakeup_all(void);
+
+void thread_sleep(struct thread *t, int64_t ticks);
+
+bool is_idle_thread(struct thread *t);
 
 #endif /* threads/thread.h */
