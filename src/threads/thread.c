@@ -1,17 +1,17 @@
-#include "threads/thread.h"
+#include "../threads/thread.h"
 #include <debug.h>
 #include <stddef.h>
 #include <random.h>
 #include <stdio.h>
 #include <string.h>
-#include "threads/flags.h"
-#include "threads/interrupt.h"
-#include "threads/intr-stubs.h"
-#include "threads/palloc.h"
-#include "threads/switch.h"
-#include "threads/synch.h"
-#include "threads/vaddr.h"
-#include "devices/timer.h"
+#include "../threads/flags.h"
+#include "../threads/interrupt.h"
+#include "../threads/intr-stubs.h"
+#include "../threads/palloc.h"
+#include "../threads/switch.h"
+#include "../threads/synch.h"
+#include "../threads/vaddr.h"
+#include "../devices/timer.h"
 
 #ifdef USERPROG
 #include "userprog/process.h"
@@ -171,8 +171,7 @@ void thread_print_stats(void) {
    The code provided sets the new thread's `priority' member to
    PRIORITY, but no actual priority scheduling is implemented.
    Priority scheduling is the goal of Problem 1-3. */
-tid_t thread_create(const char *name, int priority,
-                    thread_func *function, void *aux) {
+tid_t thread_create(const char *name, int priority, thread_func *function, void *aux) {
     struct thread *t;
     struct kernel_thread_frame *kf;
     struct switch_entry_frame *ef;
@@ -208,26 +207,34 @@ tid_t thread_create(const char *name, int priority,
     /* Add to run queue. */
     thread_unblock(t);
 
+    if (should_yield())
+        thread_yield();
+
     return tid;
 }
 
-bool compare_wakeup_time(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
-    struct thread *ta = list_entry(a, struct thread, elem);
-    struct thread *tb = list_entry(b, struct thread, elem);
-    return ta->wakeup_time < tb->wakeup_time;
+//priority: descending order, wakeup_time: ascending order
+bool compare_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+    const struct thread *thread1 = list_entry (a, struct thread, elem);
+    const struct thread *thread2 = list_entry (b, struct thread, elem);
+
+    if (thread1->priority == thread2->priority) {
+        return thread1->wakeup_time < thread2->wakeup_time;
+    }
+    return thread1->priority > thread2->priority;
 }
 
 void thread_sleep(struct thread *t, int64_t ticks) {
     int64_t now = timer_ticks();
     t->wakeup_time = now + ticks;
-    list_insert_ordered(&sleeping_list, &t->elem, &compare_wakeup_time, NULL);
+    list_insert_ordered(&sleeping_list, &t->elem, &compare_priority, NULL);
 }
 
-void thread_wakeup_all(void){
+void thread_wakeup_all(void) {
     struct thread *popped;
-    while(!list_empty(&sleeping_list)){
+    while (!list_empty(&sleeping_list)) {
         popped = list_entry(list_front(&sleeping_list), struct thread, elem);
-        if(popped->wakeup_time>timer_ticks()){
+        if (popped->wakeup_time > timer_ticks()) {
             break;
         }
         list_pop_front(&sleeping_list);
@@ -264,7 +271,7 @@ void thread_unblock(struct thread *t) {
 
     old_level = intr_disable();
     ASSERT(t->status == THREAD_BLOCKED);
-    list_push_back(&ready_list, &t->elem);
+    list_insert_ordered(&ready_list, &t->elem, compare_priority, NULL);
     t->status = THREAD_READY;
     intr_set_level(old_level);
 }
@@ -329,7 +336,7 @@ void thread_yield(void) {
 
     old_level = intr_disable();
     if (cur != idle_thread)
-        list_push_back(&ready_list, &cur->elem);
+        list_insert_ordered(&ready_list, &cur->elem, compare_priority, NULL);
     cur->status = THREAD_READY;
     schedule();
     intr_set_level(old_level);
@@ -350,9 +357,30 @@ void thread_foreach(thread_action_func *func, void *aux) {
     }
 }
 
+bool should_yield() {
+    if (list_empty(&ready_list)) {
+        return false;
+    }
+    struct thread *cur = thread_current();
+    int first_priority = list_entry(list_front(&ready_list), struct thread, elem)->priority;
+
+    return cur->priority < first_priority;
+}
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority) {
-    thread_current()->priority = new_priority;
+    enum intr_level old_level;
+
+    old_level = intr_disable();
+
+    struct thread *current_thread = thread_current();
+
+    // assign priority here
+    current_thread->priority = new_priority;
+
+    if (should_yield())
+        thread_yield();
+    intr_set_level(old_level);
 }
 
 /* Returns the current thread's priority. */
@@ -438,8 +466,7 @@ struct thread *running_thread(void) {
        down to the start of a page.  Because `struct thread' is
        always at the beginning of a page and the stack pointer is
        somewhere in the middle, this locates the curent thread. */
-    asm("mov %%esp, %0"
-    : "=g"(esp));
+    asm("mov %%esp, %0" : "=g"(esp));
     return pg_round_down(esp);
 }
 

@@ -155,4 +155,8 @@ void thread_sleep(struct thread *t, int64_t ticks);
 
 bool is_idle_thread(struct thread *t);
 
+bool should_yield();
+
+bool compare_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
 #endif /* threads/thread.h */

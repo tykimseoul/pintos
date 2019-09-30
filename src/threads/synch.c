@@ -102,11 +102,19 @@ void sema_up(struct semaphore *sema) {
     ASSERT(sema != NULL);
 
     old_level = intr_disable();
-    if (!list_empty(&sema->waiters))
-        thread_unblock(list_entry(list_pop_front(&sema->waiters),
-    struct thread, elem));
+//    printf("waiter size: %d\n", list_size(&sema->waiters));
+    if (!list_empty(&sema->waiters)) {
+        // if (list_max) the sema priority scheduling order is flipped
+        struct list_elem *max_elem = list_min(&sema->waiters, &compare_priority, NULL);
+        struct thread *max_priority = list_entry(max_elem, struct thread, elem);
+//        printf("max priority: %d\n", max_priority->priority);
+        list_remove(max_elem);
+        thread_unblock(max_priority);
+//        thread_unblock(list_entry(list_pop_front(&sema->waiters),struct thread, elem));
+    }
     sema->value++;
     intr_set_level(old_level);
+    thread_yield();
 }
 
 static void sema_test_helper(void *sema_);
