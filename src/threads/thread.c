@@ -75,9 +75,7 @@ static struct thread *next_thread_to_run(void);
 
 static void init_thread(struct thread *, const char *name, int priority);
 
-static bool is_thread(struct thread *)
-
-UNUSED;
+static bool is_thread(struct thread *) UNUSED;
 
 static void *alloc_frame(struct thread *, size_t size);
 
@@ -215,13 +213,32 @@ tid_t thread_create(const char *name, int priority, thread_func *function, void 
 
 //priority: descending order, wakeup_time: ascending order
 bool compare_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
-    const struct thread *thread1 = list_entry (a, struct thread, elem);
-    const struct thread *thread2 = list_entry (b, struct thread, elem);
+    const struct thread *thread1 = list_entry(a, struct thread, elem);
+    const struct thread *thread2 = list_entry(b, struct thread, elem);
 
     if (thread1->priority == thread2->priority) {
         return thread1->wakeup_time < thread2->wakeup_time;
     }
     return thread1->priority > thread2->priority;
+}
+
+bool priority_ascending(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+    const struct thread *thread1 = list_entry(a, struct thread, elem);
+    const struct thread *thread2 = list_entry(b, struct thread, elem);
+
+    return thread1->priority < thread2->priority;
+}
+
+bool semaphore_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+    const struct semaphore_elem *semaphore_elem1 = list_entry(a, struct semaphore_elem, elem);
+    const struct semaphore_elem *semaphore_elem2 = list_entry(b, struct semaphore_elem, elem);
+
+    const struct list sema_list1 = semaphore_elem1->semaphore.waiters;
+    const struct list sema_list2 = semaphore_elem2->semaphore.waiters;
+
+    const struct thread *thread1 = list_entry(list_front(&sema_list1), struct thread, elem);
+    const struct thread *thread2 = list_entry(list_front(&sema_list2), struct thread, elem);
+    return thread1->priority < thread2->priority;
 }
 
 void thread_sleep(struct thread *t, int64_t ticks) {
@@ -271,7 +288,7 @@ void thread_unblock(struct thread *t) {
 
     old_level = intr_disable();
     ASSERT(t->status == THREAD_BLOCKED);
-    list_insert_ordered(&ready_list, &t->elem, compare_priority, NULL);
+    list_insert_ordered(&ready_list, &t->elem, &compare_priority, NULL);
     t->status = THREAD_READY;
     intr_set_level(old_level);
 }

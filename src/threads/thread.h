@@ -159,4 +159,8 @@ bool should_yield();
 
 bool compare_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
+bool priority_ascending(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
+bool semaphore_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
 #endif /* threads/thread.h */
