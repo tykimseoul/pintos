@@ -88,6 +88,10 @@ struct thread {
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
     int64_t wakeup_time;                /* time to wake up */
+    struct list holding_locks;           // lock held by this thread
+    struct lock *lock_to_wait;          // lock to wait for
+    int old_priority;
+    bool received_donation;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -162,5 +166,11 @@ bool compare_priority(const struct list_elem *a, const struct list_elem *b, void
 bool priority_ascending(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 bool semaphore_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
+bool should_donate(struct lock *lock);
+
+void donate_priority(struct lock *lock);
+
+void revert_priority();
 
 #endif /* threads/thread.h */

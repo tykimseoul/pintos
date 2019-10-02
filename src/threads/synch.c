@@ -104,14 +104,14 @@ void sema_up(struct semaphore *sema) {
     old_level = intr_disable();
     if (!list_empty(&sema->waiters)) {
         // if (list_max) the sema priority scheduling order is flipped
-        struct list_elem *max_elem = list_max(&sema->waiters, (list_less_func*) &priority_ascending, NULL);
+        struct list_elem *max_elem = list_max(&sema->waiters, (list_less_func * ) & priority_ascending, NULL);
         struct thread *max_priority = list_entry(max_elem, struct thread, elem);
         list_remove(max_elem);
         thread_unblock(max_priority);
     }
     sema->value++;
-    intr_set_level(old_level);
     thread_yield();
+    intr_set_level(old_level);
 }
 
 static void sema_test_helper(void *sema_);
@@ -180,8 +180,16 @@ void lock_acquire(struct lock *lock) {
     ASSERT(!intr_context());
     ASSERT(!lock_held_by_current_thread(lock));
 
+    struct thread *current = thread_current();
+    current->lock_to_wait = lock;
+    if (should_donate(lock)) {
+        donate_priority(lock);
+    }
     sema_down(&lock->semaphore);
-    lock->holder = thread_current();
+    current->lock_to_wait = NULL;
+    lock->holder = current;
+
+    list_push_back(&current->holding_locks, &lock->elem);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -210,7 +218,9 @@ bool lock_try_acquire(struct lock *lock) {
 void lock_release(struct lock *lock) {
     ASSERT(lock != NULL);
     ASSERT(lock_held_by_current_thread(lock));
+    list_remove(&lock->elem);
 
+    revert_priority();
     lock->holder = NULL;
     sema_up(&lock->semaphore);
 }
@@ -281,8 +291,8 @@ void cond_signal(struct condition *cond, struct lock *lock UNUSED) {
     ASSERT(!intr_context());
     ASSERT(lock_held_by_current_thread(lock));
 
-    if (!list_empty(&cond->waiters)){
-        struct list_elem *max_elem = list_max(&cond->waiters, (list_less_func*) &semaphore_priority, NULL);
+    if (!list_empty(&cond->waiters)) {
+        struct list_elem *max_elem = list_max(&cond->waiters, (list_less_func * ) & semaphore_priority, NULL);
         struct semaphore_elem *max_priority = list_entry(max_elem, struct semaphore_elem, elem);
         list_remove(max_elem);
         sema_up(&max_priority->semaphore);

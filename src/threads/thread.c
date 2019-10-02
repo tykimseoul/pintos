@@ -24,6 +24,7 @@
 //edit to see if ftp works
 //it works
 #define THREAD_MAGIC 0xcd6abf4b
+#define DEBUG false
 
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
@@ -348,12 +349,11 @@ void thread_exit(void) {
 void thread_yield(void) {
     struct thread *cur = thread_current();
     enum intr_level old_level;
-
     ASSERT(!intr_context());
 
     old_level = intr_disable();
     if (cur != idle_thread)
-        list_insert_ordered(&ready_list, &cur->elem, compare_priority, NULL);
+        list_insert_ordered(&ready_list, &cur->elem, &compare_priority, NULL);
     cur->status = THREAD_READY;
     schedule();
     intr_set_level(old_level);
@@ -381,7 +381,43 @@ bool should_yield() {
     struct thread *cur = thread_current();
     int first_priority = list_entry(list_front(&ready_list), struct thread, elem)->priority;
 
+    if (DEBUG) printf("should yield: %d to %d\n", (cur->priority < first_priority), first_priority);
     return cur->priority < first_priority;
+}
+
+bool should_donate(struct lock *lock){
+    if(lock->holder == NULL){
+        return false;
+    }
+    struct thread *lock_holder = lock->holder;
+    struct thread *current_thread = thread_current();
+    if (list_empty(&ready_list)) {
+        return false;
+    }
+    return &current_thread->priority > &lock_holder->priority;
+}
+
+void donate_priority(struct lock *lock){
+    if(thread_current()->status!=THREAD_RUNNING){
+        return;
+    }
+    struct thread *current_thread;
+    current_thread= thread_current();
+    struct thread *lock_holder;
+    lock_holder = lock->holder;
+    if(!lock_holder->received_donation){
+        lock_holder->old_priority = lock_holder->priority;
+    }
+    lock_holder->priority = current_thread->priority;
+    lock_holder->received_donation = true;
+}
+
+void revert_priority(){
+    struct thread *current_thread = thread_current();
+    if(current_thread->received_donation){
+        current_thread->priority=current_thread->old_priority;
+        current_thread->received_donation=false;
+    }
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -506,6 +542,10 @@ static void init_thread(struct thread *t, const char *name, int priority) {
     strlcpy(t->name, name, sizeof t->name);
     t->stack = (uint8_t *) t + PGSIZE;
     t->priority = priority;
+    list_init(&t->holding_locks);
+    t->lock_to_wait = NULL;
+    t->old_priority = priority;
+    t->received_donation = false;
     t->magic = THREAD_MAGIC;
 
     old_level = intr_disable();
