@@ -221,6 +221,9 @@ void lock_release(struct lock *lock) {
     list_remove(&lock->elem);
 
     revert_priority();
+    if (thread_current()->should_lower) {
+        thread_set_priority(thread_current()->lower_to_amount);
+    }
     lock->holder = NULL;
     sema_up(&lock->semaphore);
 }

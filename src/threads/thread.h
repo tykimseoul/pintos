@@ -93,6 +93,8 @@ struct thread {
     int initial_priority;
     struct list donations_received;     // list of threads that donated to this thread
     struct list_elem donation_elem;
+    bool should_lower;
+    int lower_to_amount;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */

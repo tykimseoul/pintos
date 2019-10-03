@@ -385,8 +385,8 @@ bool should_yield() {
     return cur->priority < first_priority;
 }
 
-bool should_donate(struct lock *lock){
-    if(lock->holder == NULL){
+bool should_donate(struct lock *lock) {
+    if (lock->holder == NULL) {
         return false;
     }
     struct thread *lock_holder = lock->holder;
@@ -397,11 +397,11 @@ bool should_donate(struct lock *lock){
     return &current_thread->priority > &lock_holder->priority;
 }
 
-void donate_priority(struct lock *lock){
+void donate_priority(struct lock *lock) {
     struct thread *current_thread = thread_current();
     struct thread *lock_holder = lock->holder;
-    if(lock_holder!=NULL){
-        if(list_empty(&lock_holder->donations_received)){
+    if (lock_holder != NULL) {
+        if (list_empty(&lock_holder->donations_received)) {
             lock_holder->initial_priority = lock_holder->priority;
         }
         lock_holder->priority = current_thread->priority;
@@ -409,7 +409,7 @@ void donate_priority(struct lock *lock){
     }
 }
 
-void revert_priority(struct lock *lock){
+void revert_priority(struct lock *lock) {
     struct list_elem *e = list_begin(&thread_current()->donations_received);
     struct list_elem *next;
     while (e != list_end(&thread_current()->donations_received)) {
@@ -459,8 +459,14 @@ void thread_set_priority(int new_priority) {
     struct thread *current_thread = thread_current();
 
     // assign priority here
-    current_thread->priority = new_priority;
-    current_thread->initial_priority = new_priority;
+    if (list_empty(&current_thread->donations_received)) {
+        current_thread->priority = new_priority;
+        current_thread->initial_priority = new_priority;
+        current_thread->should_lower = false;
+    } else {
+        current_thread->should_lower = true;
+        current_thread->lower_to_amount = new_priority;
+    }
 
     if (should_yield())
         thread_yield();
