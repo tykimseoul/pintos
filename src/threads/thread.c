@@ -409,12 +409,45 @@ void donate_priority(struct lock *lock){
     }
 }
 
-void revert_priority(){
-    struct thread *current_thread = thread_current();
-    if(!list_empty(&current_thread->donations_received)){
-        current_thread->priority=current_thread->initial_priority;
-        list_pop_front(&current_thread->donations_received);
+void revert_priority(struct lock *lock){
+    struct list_elem *e = list_begin(&thread_current()->donations_received);
+    struct list_elem *next;
+    while (e != list_end(&thread_current()->donations_received)) {
+        struct thread *t = list_entry(e, struct thread, donation_elem);
+        next = list_next(e);
+        if (t->lock_to_wait == lock) {
+            list_remove(e);
+        }
+        e = next;
     }
+    struct thread *t = thread_current();
+    t->priority = t->initial_priority;
+    if (list_empty(&t->donations_received)) {
+        return;
+    }
+    struct thread *s = list_entry(list_front(&t->donations_received), struct thread, donation_elem);
+    if (s->priority > t->priority) {
+        t->priority = s->priority;
+    }
+//    struct thread *current_thread = thread_current();
+//    struct list donation_list=current_thread->donations_received;
+//    if(!(list_empty(&donation_list))) {
+//        struct list_elem *e = list_begin(&donation_list);
+//        struct list_elem *next;
+//        while (e != list_end(&donation_list) && e!=NULL) {
+//            struct thread *t = list_entry(e, struct thread, donation_elem);
+//            next = list_next(e);
+//            if (t->lock_to_wait == lock)
+//                list_remove(e);
+//            e = next;
+//        }
+//        if (!list_empty(&donation_list)) {
+//            struct thread *front = list_entry(list_front(&donation_list), struct thread, donation_elem);
+//            current_thread->priority = &front->initial_priority;
+//        }else{
+//            current_thread->priority=current_thread->initial_priority;
+//        }
+//    }
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -427,6 +460,7 @@ void thread_set_priority(int new_priority) {
 
     // assign priority here
     current_thread->priority = new_priority;
+    current_thread->initial_priority = new_priority;
 
     if (should_yield())
         thread_yield();
