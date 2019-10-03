@@ -90,8 +90,9 @@ struct thread {
     int64_t wakeup_time;                /* time to wake up */
     struct list holding_locks;           // lock held by this thread
     struct lock *lock_to_wait;          // lock to wait for
-    int old_priority;
-    bool received_donation;
+    int initial_priority;
+    struct list donations_received;     // list of threads that donated to this thread
+    struct list_elem donation_elem;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */

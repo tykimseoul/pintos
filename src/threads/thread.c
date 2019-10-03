@@ -398,25 +398,22 @@ bool should_donate(struct lock *lock){
 }
 
 void donate_priority(struct lock *lock){
-    if(thread_current()->status!=THREAD_RUNNING){
-        return;
+    struct thread *current_thread = thread_current();
+    struct thread *lock_holder = lock->holder;
+    if(lock_holder!=NULL){
+        if(list_empty(&lock_holder->donations_received)){
+            lock_holder->initial_priority = lock_holder->priority;
+        }
+        lock_holder->priority = current_thread->priority;
+        list_push_front(&lock_holder->donations_received, &current_thread->donation_elem);
     }
-    struct thread *current_thread;
-    current_thread= thread_current();
-    struct thread *lock_holder;
-    lock_holder = lock->holder;
-    if(!lock_holder->received_donation){
-        lock_holder->old_priority = lock_holder->priority;
-    }
-    lock_holder->priority = current_thread->priority;
-    lock_holder->received_donation = true;
 }
 
 void revert_priority(){
     struct thread *current_thread = thread_current();
-    if(current_thread->received_donation){
-        current_thread->priority=current_thread->old_priority;
-        current_thread->received_donation=false;
+    if(!list_empty(&current_thread->donations_received)){
+        current_thread->priority=current_thread->initial_priority;
+        list_pop_front(&current_thread->donations_received);
     }
 }
 
@@ -544,8 +541,8 @@ static void init_thread(struct thread *t, const char *name, int priority) {
     t->priority = priority;
     list_init(&t->holding_locks);
     t->lock_to_wait = NULL;
-    t->old_priority = priority;
-    t->received_donation = false;
+    t->initial_priority = priority;
+    list_init(&t->donations_received);
     t->magic = THREAD_MAGIC;
 
     old_level = intr_disable();
