@@ -400,54 +400,36 @@ bool should_donate(struct lock *lock) {
 void donate_priority(struct lock *lock) {
     struct thread *current_thread = thread_current();
     struct thread *lock_holder = lock->holder;
-    if (lock_holder != NULL) {
-        if (list_empty(&lock_holder->donations_received)) {
-            lock_holder->initial_priority = lock_holder->priority;
-        }
-        lock_holder->priority = current_thread->priority;
-        list_push_front(&lock_holder->donations_received, &current_thread->donation_elem);
+    if (lock_holder == NULL) {
+        return;
     }
+    if (list_empty(&lock_holder->donations_received)) {
+        lock_holder->initial_priority = lock_holder->priority;
+    }
+    lock_holder->priority = current_thread->priority;
+    list_push_front(&lock_holder->donations_received, &current_thread->donation_elem);
 }
 
 void revert_priority(struct lock *lock) {
-    struct list_elem *e = list_begin(&thread_current()->donations_received);
-    struct list_elem *next;
-    while (e != list_end(&thread_current()->donations_received)) {
+    if (list_empty(&thread_current()->donations_received)) {
+        return;
+    }
+    struct thread *cur = thread_current();
+    struct list_elem *e = list_front(&cur->donations_received);
+    while (e != list_end(&cur->donations_received) && e != NULL) {
         struct thread *t = list_entry(e, struct thread, donation_elem);
-        next = list_next(e);
         if (t->lock_to_wait == lock) {
             list_remove(e);
         }
-        e = next;
+        e = list_next(e);
     }
-    struct thread *t = thread_current();
-    t->priority = t->initial_priority;
-    if (list_empty(&t->donations_received)) {
-        return;
+    cur->priority = cur->initial_priority;
+    if (!list_empty(&cur->donations_received)) {
+        struct thread *s = list_entry(list_front(&cur->donations_received), struct thread, donation_elem);
+        if (s->priority > cur->priority) {
+            cur->priority = s->priority;
+        }
     }
-    struct thread *s = list_entry(list_front(&t->donations_received), struct thread, donation_elem);
-    if (s->priority > t->priority) {
-        t->priority = s->priority;
-    }
-//    struct thread *current_thread = thread_current();
-//    struct list donation_list=current_thread->donations_received;
-//    if(!(list_empty(&donation_list))) {
-//        struct list_elem *e = list_begin(&donation_list);
-//        struct list_elem *next;
-//        while (e != list_end(&donation_list) && e!=NULL) {
-//            struct thread *t = list_entry(e, struct thread, donation_elem);
-//            next = list_next(e);
-//            if (t->lock_to_wait == lock)
-//                list_remove(e);
-//            e = next;
-//        }
-//        if (!list_empty(&donation_list)) {
-//            struct thread *front = list_entry(list_front(&donation_list), struct thread, donation_elem);
-//            current_thread->priority = &front->initial_priority;
-//        }else{
-//            current_thread->priority=current_thread->initial_priority;
-//        }
-//    }
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
