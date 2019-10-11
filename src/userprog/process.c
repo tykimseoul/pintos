@@ -1,22 +1,24 @@
-#include "userprog/process.h"
+#include "../userprog/process.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "userprog/gdt.h"
-#include "userprog/pagedir.h"
-#include "userprog/tss.h"
-#include "filesys/directory.h"
-#include "filesys/file.h"
-#include "filesys/filesys.h"
-#include "threads/flags.h"
-#include "threads/init.h"
-#include "threads/interrupt.h"
-#include "threads/palloc.h"
-#include "threads/thread.h"
-#include "threads/vaddr.h"
+#include "../userprog/gdt.h"
+#include "../userprog/pagedir.h"
+#include "../userprog/tss.h"
+#include "../filesys/directory.h"
+#include "../filesys/file.h"
+#include "../filesys/filesys.h"
+#include "../threads/flags.h"
+#include "../threads/init.h"
+#include "../threads/interrupt.h"
+#include "../threads/palloc.h"
+#include "../threads/thread.h"
+#include "../threads/vaddr.h"
+
+#define FILE_NAME_SIZE 256
 
 static thread_func start_process NO_RETURN;
 
@@ -44,6 +46,25 @@ tid_t process_execute(const char *file_name) {
     return tid;
 }
 
+void parse_filename(char *src, char *dest) {
+    strlcpy(dest, src, strlen(src) + 1);
+    for (int i = 0; i < strlen(src); i++) {
+        if (dest[i] == ' ') {
+            dest[i] = '\0';
+        }
+    }
+}
+
+int count_characters(char *src) {
+    int count = 0;
+    for (int i = 0; i < strlen(src); i++) {
+        if (src[i] != ' ') {
+            count++;
+        }
+    }
+    return count;
+}
+
 /* A thread function that loads a user process and starts it
    running. */
 static void start_process(void *file_name_) {
@@ -56,7 +77,12 @@ static void start_process(void *file_name_) {
     if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
     if_.cs = SEL_UCSEG;
     if_.eflags = FLAG_IF | FLAG_MBS;
-    success = load(file_name, &if_.eip, &if_.esp);
+    char dest[FILE_NAME_SIZE];
+    parse_filename(file_name, dest);
+    success = load(dest, &if_.eip, &if_.esp);
+    if (success) {
+        populate_stack(file_name, &if_.esp);
+    }
 
     /* If load failed, quit. */
     palloc_free_page(file_name);
@@ -73,6 +99,59 @@ static void start_process(void *file_name_) {
     NOT_REACHED();
 }
 
+void populate_stack(char *file_name, void **esp) {
+    int argc = 0;
+    char file_name_copy[256];
+    strlcpy(file_name_copy, file_name, strlen(file_name) + 1);
+
+    char *token, *save_ptr;
+    for (token = strtok_r(file_name_copy, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr)) {
+        argc++;
+    }
+
+    int non_space_length = 0;
+    int *argv = calloc(argc, sizeof(int));
+    int i = 0;
+
+    //push args and save addresses to argv
+    for (token = strtok_r(file_name, " ", &save_ptr), i = 0; token != NULL; token = strtok_r(NULL, " ", &save_ptr), i++) {
+        *esp -= strlen(token) + 1;
+        memcpy(*esp, token, strlen(token) + 1);
+        non_space_length += strlen(token);
+        argv[i] = *esp;
+    }
+
+    //push align
+    int word_align = non_space_length % 4;
+    *esp -= word_align != 0 ? 4 - word_align : 0;
+
+    //push NULL
+    *esp -= 4;
+
+    //push addresses
+    for (int i = argc - 1; i >= 0; i--) {
+        *esp -= sizeof(char **);
+        memcpy(*esp, &argv[i], sizeof(char **));
+    }
+
+    //push address of argv[0]
+//    *esp -= sizeof(char **);
+//    memcpy(*esp, (esp + sizeof(char **)), sizeof(char **));
+
+    int pt = *esp;
+    *esp -= sizeof(char **);
+    memcpy(*esp, &pt, sizeof(char **));
+
+    //push argc
+    *esp -= sizeof(int);
+    memcpy(*esp, &argc, sizeof(int));
+
+    //push return address
+    *esp -= sizeof(void *);
+
+    free(argv);
+}
+
 /* Waits for thread TID to die and returns its exit status.  If
    it was terminated by the kernel (i.e. killed due to an
    exception), returns -1.  If TID is invalid or if it was not a
@@ -83,6 +162,11 @@ static void start_process(void *file_name_) {
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int process_wait(tid_t child_tid UNUSED) {
+    for (int i = 0; i < 1000000000; i++);
+
+//    while (true){
+//        thread_yield();
+//    }
     return -1;
 }
 
@@ -356,8 +440,7 @@ static bool validate_segment(const struct Elf32_Phdr *phdr, struct file *file) {
 
    Return true if successful, false if a memory allocation error
    or disk read error occurs. */
-static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
-             uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
+static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
     ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
     ASSERT(pg_ofs(upage) == 0);
     ASSERT(ofs % PGSIZE == 0);
@@ -404,7 +487,7 @@ static bool setup_stack(void **esp) {
 
     kpage = palloc_get_page(PAL_USER | PAL_ZERO);
     if (kpage != NULL) {
-        success = install_page(((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
+        success = install_page(((uint8_t * )PHYS_BASE) - PGSIZE, kpage, true);
         if (success)
             *esp = PHYS_BASE;
         else
