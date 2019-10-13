@@ -6,6 +6,7 @@
 #include "../devices/shutdown.h"
 #include "../devices/input.h"
 #include "../threads/vaddr.h"
+#include "../filesys/filesys.h"
 
 static void syscall_handler(struct intr_frame *);
 
@@ -23,18 +24,24 @@ static void syscall_handler(struct intr_frame *f UNUSED) {
             halt();
             break;
         case SYS_EXIT:
-            check_valid_address(*((int *)f->esp + 1));
+            check_valid_address(*((int *) f->esp + 1));
             exit(0);
             break;
         case SYS_EXEC: {
-            check_valid_address(*((int *)f->esp + 1));
-            exec(*((int *)f->esp + 1));
+            check_valid_address(*((int *) f->esp + 1));
+            exec(*((int *) f->esp + 1));
             break;
         }
         case SYS_WAIT:
             break;
-        case SYS_CREATE:
+        case SYS_CREATE: {
+            const char *file = (const char *) *((int *) f->esp + 1);
+            unsigned initial_size = (unsigned) *((int *) f->esp + 2);
+            check_valid_address(file);
+            check_valid_address(initial_size);
+            f->eax = create(file, initial_size);
             break;
+        }
         case SYS_REMOVE:
             break;
         case SYS_OPEN:
@@ -83,7 +90,12 @@ int wait(pid_t pid) {
     return process_wait(pid);
 }
 
-bool create(const char *file, unsigned initial_size) {}
+bool create(const char *file, unsigned initial_size) {
+    if (file == NULL) {
+        exit(-1);
+    }
+    return filesys_create(file, initial_size);
+}
 
 bool remove(const char *file) {}
 
