@@ -25,7 +25,7 @@ static void syscall_handler(struct intr_frame *f UNUSED) {
             break;
         case SYS_EXIT:
             check_valid_address(*((int *) f->esp + 1));
-            exit(0);
+            exit(*((int *) f->esp + 1));
             break;
         case SYS_EXEC: {
             check_valid_address(*((int *) f->esp + 1));
@@ -33,6 +33,8 @@ static void syscall_handler(struct intr_frame *f UNUSED) {
             break;
         }
         case SYS_WAIT:
+            check_valid_address(*((int *) f->esp + 1));
+            wait(*((int *) f->esp + 1));
             break;
         case SYS_CREATE: {
             const char *file = (const char *) *((int *) f->esp + 1);
@@ -79,6 +81,7 @@ void halt(void) {
 
 void exit(int status) {
     printf("%s: exit(%d)\n", thread_name(), status);
+    thread_current()->exit_status = status;
     thread_exit();
 }
 

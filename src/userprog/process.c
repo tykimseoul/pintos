@@ -164,12 +164,23 @@ void populate_stack(char *file_name, void **esp) {
 
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
-int process_wait(tid_t child_tid UNUSED) {
-    for (int i = 0; i < 10000000; i++);
+int process_wait(tid_t child_tid) {
+    struct list_elem *child = list_begin(&(thread_current()->children));
+    struct thread *t = NULL;
+    int exit_status;
 
-//    while (true){
-//        thread_yield();
-//    }
+    while (child != list_end(&(thread_current()->children))) {
+        t = list_entry(child, struct thread, child_elem);
+        if (t->tid == child_tid) {
+            exit_status = t->exit_status;
+            list_remove(&(t->child_elem));
+            sema_down(&(t->child_sema));
+            return exit_status;
+        }
+        child = list_next(child);
+    }
+//    for(int i=0; i<10000000; i++);
+
     return -1;
 }
 
@@ -193,6 +204,8 @@ void process_exit(void) {
         pagedir_activate(NULL);
         pagedir_destroy(pd);
     }
+
+    sema_up(&(cur->child_sema));
 }
 
 /* Sets up the CPU for running user code in the current
