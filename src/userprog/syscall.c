@@ -4,6 +4,8 @@
 #include "../threads/interrupt.h"
 #include "../threads/thread.h"
 #include "../devices/shutdown.h"
+#include "../devices/input.h"
+#include "../threads/vaddr.h"
 
 static void syscall_handler(struct intr_frame *);
 
@@ -21,10 +23,14 @@ static void syscall_handler(struct intr_frame *f UNUSED) {
             halt();
             break;
         case SYS_EXIT:
+            check_valid_address(*((int *)f->esp + 1));
             exit(0);
             break;
-        case SYS_EXEC:
+        case SYS_EXEC: {
+            check_valid_address(*((int *)f->esp + 1));
+            exec(*((int *)f->esp + 1));
             break;
+        }
         case SYS_WAIT:
             break;
         case SYS_CREATE:
@@ -35,15 +41,22 @@ static void syscall_handler(struct intr_frame *f UNUSED) {
             break;
         case SYS_FILESIZE:
             break;
-        case SYS_READ:
+        case SYS_READ: {
+            check_valid_address(f->esp);
+            int fd = *((int *) f->esp + 1);
+            void *buffer = (void *) (*((int *) f->esp + 2));
+            unsigned size = *((unsigned *) f->esp + 3);
+            f->eax = read(fd, buffer, size);
             break;
-        case SYS_WRITE:
-            ;
-            int fd = *((int*)f->esp + 1);
-            void* buffer = (void*)(*((int*)f->esp + 2));
-            unsigned size = *((unsigned*)f->esp + 3);
+        }
+        case SYS_WRITE: {
+            check_valid_address(f->esp);
+            int fd = *((int *) f->esp + 1);
+            void *buffer = (void *) (*((int *) f->esp + 2));
+            unsigned size = *((unsigned *) f->esp + 3);
             f->eax = write(fd, buffer, size);
             break;
+        }
         case SYS_SEEK:
             break;
         case SYS_TELL:
@@ -62,9 +75,13 @@ void exit(int status) {
     thread_exit();
 }
 
-pid_t exec(const char *cmd_lime) {}
+pid_t exec(const char *cmd_line) {
+    return process_execute(cmd_line);
+}
 
-int wait(pid_t pid) {}
+int wait(pid_t pid) {
+    return process_wait(pid);
+}
 
 bool create(const char *file, unsigned initial_size) {}
 
@@ -74,7 +91,13 @@ int open(const char *file) {}
 
 int filesize(int fd) {}
 
-int read(int fd, void *buffer, unsigned size) {}
+int read(int fd, void *buffer, unsigned size) {
+    if (fd == 0) {
+        return (int) input_getc();
+    } else if (fd == 1) {
+        return 0;
+    }
+}
 
 int write(int fd, const void *buffer, unsigned size) {
     if (fd == 1) {
@@ -89,4 +112,10 @@ void seek(int fd, unsigned position) {}
 unsigned tell(int fd) {}
 
 void close(int fd) {}
+
+void check_valid_address(void *address) {
+    if (!is_user_vaddr(address)) {
+        exit(-1);
+    }
+}
 
