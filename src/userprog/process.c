@@ -42,6 +42,11 @@ tid_t process_execute(const char *file_name) {
     char dest[FILE_NAME_SIZE];
     parse_filename(file_name, dest);
 
+    struct file *file1 = filesys_open(dest);
+    if (!file1) {
+        return TID_ERROR;
+    }
+
     /* Create a new thread to execute FILE_NAME. */
     tid = thread_create(dest, PRI_DEFAULT, start_process, fn_copy);
 
