@@ -29,12 +29,12 @@ static void syscall_handler(struct intr_frame *f UNUSED) {
             break;
         case SYS_EXEC: {
             check_valid_address(*((int *) f->esp + 1));
-            exec(*((int *) f->esp + 1));
+            f->eax = exec(*((int *) f->esp + 1));
             break;
         }
         case SYS_WAIT:
             check_valid_address(*((int *) f->esp + 1));
-            wait(*((int *) f->esp + 1));
+            f->eax = wait(*((int *) f->esp + 1));
             break;
         case SYS_CREATE: {
             const char *file = (const char *) *((int *) f->esp + 1);

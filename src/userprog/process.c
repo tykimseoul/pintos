@@ -44,6 +44,19 @@ tid_t process_execute(const char *file_name) {
 
     /* Create a new thread to execute FILE_NAME. */
     tid = thread_create(dest, PRI_DEFAULT, start_process, fn_copy);
+
+    struct list_elem *child = list_begin(&(thread_current()->children));
+    struct thread *t = NULL;
+
+    while (child != list_end(&(thread_current()->children))) {
+        t = list_entry(child, struct thread, child_elem);
+        if (t->tid == tid) {
+            sema_down(&t->child_sema);
+            break;
+        }
+        child = list_next(child);
+    }
+
     if (tid == TID_ERROR)
         palloc_free_page(fn_copy);
     return tid;
@@ -86,6 +99,8 @@ static void start_process(void *file_name_) {
     if (success) {
         populate_stack(file_name, &if_.esp);
     }
+
+    sema_up(&thread_current()->child_sema);
 
     /* If load failed, quit. */
     palloc_free_page(file_name);
