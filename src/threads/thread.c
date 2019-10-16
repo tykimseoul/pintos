@@ -211,7 +211,7 @@ tid_t thread_create(const char *name, int priority,
     return tid;
 }
 
-bool compare_wakeup_time(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+bool compare_wakeup_time(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
     struct thread *ta = list_entry(a, struct thread, elem);
     struct thread *tb = list_entry(b, struct thread, elem);
     return ta->wakeup_time < tb->wakeup_time;
@@ -223,11 +223,11 @@ void thread_sleep(struct thread *t, int64_t ticks) {
     list_insert_ordered(&sleeping_list, &t->elem, &compare_wakeup_time, NULL);
 }
 
-void thread_wakeup_all(void){
+void thread_wakeup_all(void) {
     struct thread *popped;
-    while(!list_empty(&sleeping_list)){
+    while (!list_empty(&sleeping_list)) {
         popped = list_entry(list_front(&sleeping_list), struct thread, elem);
-        if(popped->wakeup_time>timer_ticks()){
+        if (popped->wakeup_time > timer_ticks()) {
             break;
         }
         list_pop_front(&sleeping_list);
@@ -471,6 +471,9 @@ static void init_thread(struct thread *t, const char *name, int priority) {
     sema_init(&(t->child_sema), 0);
     list_init(&t->children);
     list_push_back(&(running_thread()->children), &(t->child_elem));
+    for (int i = 0; i < FILE_MAX_COUNT; i++) {
+      t->files[i] = NULL;
+    }
 #endif
     intr_set_level(old_level);
 }

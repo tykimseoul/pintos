@@ -23,6 +23,7 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+#define FILE_MAX_COUNT 128              // Maximum number of open files
 
 /* A kernel thread or user process.
 
@@ -100,6 +101,7 @@ struct thread {
     struct list_elem child_elem;
     int exit_status;
     struct semaphore child_sema;
+    struct file* files[FILE_MAX_COUNT];            // file array
 #endif
 
     /* Owned by thread.c. */
