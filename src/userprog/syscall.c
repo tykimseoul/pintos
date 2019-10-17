@@ -76,9 +76,18 @@ static void syscall_handler(struct intr_frame *f UNUSED) {
             f->eax = write(fd, buffer, size);
             break;
         }
-        case SYS_SEEK:
+        case SYS_SEEK: {
+            check_address_validity(f->esp);
+            int fd = *((int *) f->esp + 1);
+            unsigned position = (unsigned) *((int *) f->esp + 2);
+            seek(fd, position);
+        }
             break;
-        case SYS_TELL:
+        case SYS_TELL: {
+            check_address_validity(f->esp);
+            int fd = *((int *) f->esp + 1);
+            f->eax = tell(fd);
+        }
             break;
         case SYS_CLOSE: {
             int fd = *((int *) f->esp + 1);
@@ -165,9 +174,17 @@ int write(int fd, const void *buffer, unsigned size) {
     }
 }
 
-void seek(int fd, unsigned position) {}
+void seek(int fd, unsigned position) {
+    struct file *seeking_file = thread_current()->files[fd];
+    check_file_validity(seeking_file);
+    file_seek(seeking_file, position);
+}
 
-unsigned tell(int fd) {}
+unsigned tell(int fd) {
+    struct file *telling_file = thread_current()->files[fd];
+    check_file_validity(telling_file);
+    return file_tell(telling_file);
+}
 
 void close(int fd) {
     struct file *closing_file = thread_current()->files[fd];
