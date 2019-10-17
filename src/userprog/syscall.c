@@ -136,6 +136,9 @@ int open(const char *file) {
     check_file_validity(file);
     struct file *open_file = filesys_open(file);
     if (open_file) {
+        if (strcmp(thread_current()->name, file) == 0) {
+            file_deny_write(open_file);
+        }
         for (int i = 2; i < FILE_MAX_COUNT; i++) {
             if (thread_current()->files[i] == NULL) {
                 thread_current()->files[i] = open_file;
