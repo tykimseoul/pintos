@@ -35,22 +35,21 @@ static void syscall_handler(struct intr_frame *f UNUSED) {
             break;
         }
         case SYS_CREATE: {
+            check_address_validity(f->esp);
             const char *file = (const char *) *((int *) f->esp + 1);
             unsigned initial_size = (unsigned) *((int *) f->esp + 2);
-            check_address_validity(file);
-            check_address_validity(initial_size);
             f->eax = create(file, initial_size);
             break;
         }
         case SYS_REMOVE: {
+            check_address_validity(f->esp);
             const char *file = (const char *) *((int *) f->esp + 1);
-            check_address_validity(file);
             f->eax = remove(file);
             break;
         }
         case SYS_OPEN: {
+            check_address_validity(f->esp);
             const char *file = (const char *) *((int *) f->esp + 1);
-            check_address_validity(file);
             f->eax = open(file);
             break;
         }
@@ -81,17 +80,17 @@ static void syscall_handler(struct intr_frame *f UNUSED) {
             int fd = *((int *) f->esp + 1);
             unsigned position = (unsigned) *((int *) f->esp + 2);
             seek(fd, position);
-        }
             break;
+        }
         case SYS_TELL: {
             check_address_validity(f->esp);
             int fd = *((int *) f->esp + 1);
             f->eax = tell(fd);
-        }
             break;
+        }
         case SYS_CLOSE: {
+            check_address_validity(f->esp);
             int fd = *((int *) f->esp + 1);
-            check_address_validity(fd);
             close(fd);
             break;
         }
@@ -170,7 +169,9 @@ int write(int fd, const void *buffer, unsigned size) {
         putbuf(buffer, size);
         return size;
     } else {
-        return file_write(thread_current()->files[fd], buffer, size);
+        struct file *writing_file = thread_current()->files[fd];
+        check_file_validity(writing_file);
+        return file_write(writing_file, buffer, size);
     }
 }
 
