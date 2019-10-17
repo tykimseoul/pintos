@@ -15,57 +15,53 @@ void syscall_init(void) {
 }
 
 static void syscall_handler(struct intr_frame *f UNUSED) {
-    int *call_number = *(int *) f->esp;
-//    printf("system call: %d\n", call_number);
-//    hex_dump(f->esp, f->esp, 300, 1);
-
     switch (*(int *) f->esp) {
         case SYS_HALT:
             halt();
             break;
         case SYS_EXIT: {
-            check_valid_address(*((int *) f->esp + 1));
+            check_address_validity(*((int *) f->esp + 1));
             exit(*((int *) f->esp + 1));
             break;
         }
         case SYS_EXEC: {
-            check_valid_address(*((int *) f->esp + 1));
+            check_address_validity(*((int *) f->esp + 1));
             f->eax = exec(*((int *) f->esp + 1));
             break;
         }
         case SYS_WAIT: {
-            check_valid_address(*((int *) f->esp + 1));
+            check_address_validity(*((int *) f->esp + 1));
             f->eax = wait(*((int *) f->esp + 1));
             break;
         }
         case SYS_CREATE: {
             const char *file = (const char *) *((int *) f->esp + 1);
             unsigned initial_size = (unsigned) *((int *) f->esp + 2);
-            check_valid_address(file);
-            check_valid_address(initial_size);
+            check_address_validity(file);
+            check_address_validity(initial_size);
             f->eax = create(file, initial_size);
             break;
         }
         case SYS_REMOVE: {
             const char *file = (const char *) *((int *) f->esp + 1);
-            check_valid_address(file);
+            check_address_validity(file);
             f->eax = remove(file);
             break;
         }
         case SYS_OPEN: {
             const char *file = (const char *) *((int *) f->esp + 1);
-            check_valid_address(file);
+            check_address_validity(file);
             f->eax = open(file);
             break;
         }
         case SYS_FILESIZE: {
-            check_valid_address(f->esp);
+            check_address_validity(f->esp);
             int fd = *((int *) f->esp + 1);
             f->eax = filesize(fd);
             break;
         }
         case SYS_READ: {
-            check_valid_address(f->esp);
+            check_address_validity(f->esp);
             int fd = *((int *) f->esp + 1);
             void *buffer = (void *) (*((int *) f->esp + 2));
             unsigned size = *((unsigned *) f->esp + 3);
@@ -73,7 +69,7 @@ static void syscall_handler(struct intr_frame *f UNUSED) {
             break;
         }
         case SYS_WRITE: {
-            check_valid_address(f->esp);
+            check_address_validity(f->esp);
             int fd = *((int *) f->esp + 1);
             void *buffer = (void *) (*((int *) f->esp + 2));
             unsigned size = *((unsigned *) f->esp + 3);
@@ -86,7 +82,7 @@ static void syscall_handler(struct intr_frame *f UNUSED) {
             break;
         case SYS_CLOSE: {
             int fd = *((int *) f->esp + 1);
-            check_valid_address(fd);
+            check_address_validity(fd);
             close(fd);
             break;
         }
@@ -117,23 +113,17 @@ int wait(pid_t pid) {
 }
 
 bool create(const char *file, unsigned initial_size) {
-    if (file == NULL) {
-        exit(-1);
-    }
+    check_file_validity(file);
     return filesys_create(file, initial_size);
 }
 
 bool remove(const char *file) {
-    if (file == NULL) {
-        exit(-1);
-    }
+    check_file_validity(file);
     return filesys_remove(file);
 }
 
 int open(const char *file) {
-    if (file == NULL) {
-        exit(-1);
-    }
+    check_file_validity(file);
     struct file *open_file = filesys_open(file);
     if (open_file) {
         for (int i = 2; i < FILE_MAX_COUNT; i++) {
@@ -148,9 +138,7 @@ int open(const char *file) {
 
 int filesize(int fd) {
     struct file *for_size = thread_current()->files[fd];
-    if (for_size == NULL) {
-        exit(-1);
-    }
+    check_file_validity(for_size);
     return file_length(for_size);
 }
 
@@ -160,10 +148,9 @@ int read(int fd, void *buffer, unsigned size) {
     } else if (fd == 1) {
         return 0;
     } else {
-        if (thread_current()->files[fd] == NULL) {
-            exit(-1);
-        }
-        return file_read(thread_current()->files[fd], buffer, size);
+        struct file *reading_file = thread_current()->files[fd];
+        check_file_validity(reading_file);
+        return file_read(reading_file, buffer, size);
     }
 }
 
@@ -184,17 +171,16 @@ unsigned tell(int fd) {}
 
 void close(int fd) {
     struct file *closing_file = thread_current()->files[fd];
-    if (closing_file != NULL) {
-        thread_current()->files[fd] = NULL;
-        return file_close(closing_file);
-    } else {
-        exit(-1);
-    }
+    check_file_validity(closing_file);
+    thread_current()->files[fd] = NULL;
+    file_close(closing_file);
 }
 
-void check_valid_address(void *address) {
-    if (!is_user_vaddr(address)) {
-        exit(-1);
-    }
+void check_address_validity(void *address) {
+    if (!is_user_vaddr(address)) exit(-1);
+}
+
+void check_file_validity(struct file *file1) {
+    if (!file1) exit(-1);
 }
 
