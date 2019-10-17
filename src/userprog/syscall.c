@@ -60,7 +60,9 @@ static void syscall_handler(struct intr_frame *f UNUSED) {
             break;
         }
         case SYS_READ: {
-            check_address_validity(f->esp);
+            check_address_validity(*((int *) f->esp + 1));
+            check_address_validity(*((int *) f->esp + 2));
+            check_address_validity(*((int *) f->esp + 3));
             int fd = *((int *) f->esp + 1);
             void *buffer = (void *) (*((int *) f->esp + 2));
             unsigned size = *((unsigned *) f->esp + 3);
