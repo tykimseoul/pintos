@@ -49,21 +49,27 @@ tid_t process_execute(const char *file_name) {
 
     /* Create a new thread to execute FILE_NAME. */
     tid = thread_create(dest, PRI_DEFAULT, start_process, fn_copy);
+    if (tid == TID_ERROR) {
+        palloc_free_page(fn_copy);
+    } else {
+        struct list_elem *child = list_begin(&(thread_current()->children));
+        struct thread *t = NULL;
 
-    struct list_elem *child = list_begin(&(thread_current()->children));
-    struct thread *t = NULL;
-
-    while (child != list_end(&(thread_current()->children))) {
-        t = list_entry(child, struct thread, child_elem);
-        if (t->tid == tid) {
-            sema_down(&t->child_sema);
-            break;
+        while (child != list_end(&(thread_current()->children))) {
+            t = list_entry(child,
+            struct thread, child_elem);
+            if (t->tid == tid) {
+                sema_down(&t->child_sema);
+                if (!t->load_success) {
+                    list_remove(&t->child_elem);
+                    return -1;
+                }
+                break;
+            }
+            child = list_next(child);
         }
-        child = list_next(child);
     }
 
-    if (tid == TID_ERROR)
-        palloc_free_page(fn_copy);
     return tid;
 }
 
@@ -102,15 +108,17 @@ static void start_process(void *file_name_) {
     parse_filename(file_name, dest);
     success = load(dest, &if_.eip, &if_.esp);
     if (success) {
+        thread_current()->load_success = true;
         populate_stack(file_name, &if_.esp);
     }
 
-    sema_up(&thread_current()->child_sema);
-
     /* If load failed, quit. */
     palloc_free_page(file_name);
-    if (!success)
-        thread_exit();
+    if (!success) {
+        thread_current()->load_success = false;
+        exit(-1);
+    }
+    sema_up(&thread_current()->child_sema);
 
     /* Start the user process by simulating a return from an
        interrupt, implemented by intr_exit (in

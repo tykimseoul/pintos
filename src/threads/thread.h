@@ -102,6 +102,7 @@ struct thread {
     int exit_status;
     struct semaphore child_sema;
     struct file* files[FILE_MAX_COUNT];            // file array
+    bool load_success;
 #endif
 
     /* Owned by thread.c. */

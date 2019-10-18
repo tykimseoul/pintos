@@ -468,6 +468,7 @@ static void init_thread(struct thread *t, const char *name, int priority) {
     list_push_back(&all_list, &t->allelem);
 
 #ifdef USERPROG
+    t->load_success = false;
     sema_init(&(t->child_sema), 0);
     list_init(&t->children);
     list_push_back(&(running_thread()->children), &(t->child_elem));
