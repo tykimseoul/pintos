@@ -10,7 +10,10 @@
 
 static void syscall_handler(struct intr_frame *);
 
+struct lock file_lock;
+
 void syscall_init(void) {
+    lock_init(&file_lock);
     intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
@@ -50,7 +53,9 @@ static void syscall_handler(struct intr_frame *f UNUSED) {
         case SYS_OPEN: {
             check_address_validity(f->esp);
             const char *file = (const char *) *((int *) f->esp + 1);
+            lock_acquire(&file_lock);
             f->eax = open(file);
+            lock_release(&file_lock);
             break;
         }
         case SYS_FILESIZE: {
@@ -66,7 +71,9 @@ static void syscall_handler(struct intr_frame *f UNUSED) {
             int fd = *((int *) f->esp + 1);
             void *buffer = (void *) (*((int *) f->esp + 2));
             unsigned size = *((unsigned *) f->esp + 3);
+            lock_acquire(&file_lock);
             f->eax = read(fd, buffer, size);
+            lock_release(&file_lock);
             break;
         }
         case SYS_WRITE: {

@@ -203,11 +203,11 @@ int process_wait(tid_t child_tid) {
             sema_down(&(t->child_sema));
             exit_status = t->exit_status;
             list_remove(&(t->child_elem));
+            sema_up(&(t->exit_sema));
             return exit_status;
         }
         child = list_next(child);
     }
-//    for(int i=0; i<10000000; i++);
 
     return -1;
 }
@@ -218,6 +218,7 @@ void process_exit(void) {
     uint32_t *pd;
 
     sema_up(&cur->child_sema);
+    sema_down(&cur->exit_sema);
     /* Destroy the current process's page directory and switch back
        to the kernel-only page directory. */
     pd = cur->pagedir;

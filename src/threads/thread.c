@@ -470,6 +470,7 @@ static void init_thread(struct thread *t, const char *name, int priority) {
 #ifdef USERPROG
     t->load_success = false;
     sema_init(&(t->child_sema), 0);
+    sema_init(&t->exit_sema, 0);
     list_init(&t->children);
     list_push_back(&(running_thread()->children), &(t->child_elem));
     for (int i = 0; i < FILE_MAX_COUNT; i++) {
