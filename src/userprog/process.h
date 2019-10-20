@@ -13,8 +13,6 @@ void process_activate(void);
 
 void parse_filename(char *src, char *dest);
 
-int count_characters(char *src);
-
 void populate_stack(char *file_name, void **esp);
 
 

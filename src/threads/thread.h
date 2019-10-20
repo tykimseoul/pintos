@@ -97,13 +97,13 @@ struct thread {
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-    struct list children;
-    struct list_elem child_elem;
-    int exit_status;
-    struct semaphore child_sema;
-    struct file* files[FILE_MAX_COUNT];            // file array
-    bool load_success;
-    struct semaphore exit_sema;
+    struct list children;               //list of child processes of this thread
+    struct list_elem child_elem;        // list_elem for children list
+    int exit_status;                    // store exit status of this thread
+    struct semaphore child_sema;        // semaphore for the child
+    struct file* files[FILE_MAX_COUNT]; // file array
+    bool load_success;                  // store result of load
+    struct semaphore exit_sema;         // separate semaphore for exiting
 #endif
 
     /* Owned by thread.c. */

@@ -82,16 +82,6 @@ void parse_filename(char *src, char *dest) {
     }
 }
 
-int count_characters(char *src) {
-    int count = 0;
-    for (int i = 0; i < strlen(src); i++) {
-        if (src[i] != ' ') {
-            count++;
-        }
-    }
-    return count;
-}
-
 /* A thread function that loads a user process and starts it
    running. */
 static void start_process(void *file_name_) {
@@ -166,9 +156,6 @@ void populate_stack(char *file_name, void **esp) {
     }
 
     //push address of argv[0]
-//    *esp -= sizeof(char **);
-//    memcpy(*esp, (esp + sizeof(char **)), sizeof(char **));
-
     int pt = *esp;
     *esp -= sizeof(char **);
     memcpy(*esp, &pt, sizeof(char **));
