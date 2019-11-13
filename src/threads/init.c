@@ -31,6 +31,10 @@
 #else
 #include "tests/threads/tests.h"
 #endif
+#ifdef VM
+#include "../vm/frame_page.h"
+#include "../vm/swap.h"
+#endif
 #ifdef FILESYS
 #include "devices/block.h"
 #include "devices/ide.h"
@@ -99,6 +103,11 @@ main (void)
   malloc_init ();
   paging_init ();
 
+#ifdef VM
+  init_page_sys();
+  init_frame_sys();
+#endif
+
   /* Segmentation. */
 #ifdef USERPROG
   tss_init ();
@@ -125,6 +134,10 @@ main (void)
   ide_init ();
   locate_block_devices ();
   filesys_init (format_filesys);
+#endif
+
+#ifdef VM
+  swap_init();
 #endif
 
   printf ("Boot complete.\n");

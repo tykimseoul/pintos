@@ -1,10 +1,10 @@
-#include "userprog/exception.h"
+#include "../userprog/exception.h"
 #include <inttypes.h>
 #include <stdio.h>
-#include "userprog/gdt.h"
-#include "threads/interrupt.h"
-#include "threads/thread.h"
+#include "../userprog/gdt.h"
+#include "../threads/interrupt.h"
 #include "../threads/vaddr.h"
+#include "../vm/frame_page.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -118,6 +118,8 @@ static void page_fault(struct intr_frame *f) {
     bool not_present;  /* True: not-present page, false: writing r/o page. */
     bool write;        /* True: access was write, false: access was read. */
     bool user;         /* True: access by user, false: access by kernel. */
+    bool contiguous;
+    bool in_user_stack;
     void *fault_addr;  /* Fault address. */
 
     /* Obtain faulting address, the virtual address that was
@@ -140,8 +142,24 @@ static void page_fault(struct intr_frame *f) {
     not_present = (f->error_code & PF_P) == 0;
     write = (f->error_code & PF_W) != 0;
     user = (f->error_code & PF_U) != 0;
+    contiguous = fault_addr - f->esp < 32;
+    in_user_stack = f->esp < 0x08048000;
+
+    // if invalid fault address or not
     if (!user || is_kernel_vaddr(fault_addr) || !fault_addr) {
         exit(-1);
+    } else if (!contiguous && !in_user_stack) {
+        void *upage = pg_round_down(fault_addr);
+        bool writable = true;
+        struct supp_page_table_entry *spte=get_spte(upage);
+        if (!(get_spte(upage)->in_frame)) {
+            //this means the frame is in swap
+            //reclaim
+            evict_frame(get_frame_victim());
+
+        } else {
+            allocate_frame(upage, PAL_USER | PAL_ZERO, false);
+        }
     }
 
     /* To implement virtual memory, delete the rest of the function
@@ -154,4 +172,7 @@ static void page_fault(struct intr_frame *f) {
            user ? "user" : "kernel");
     kill(f);
 }
+
+
+
 
