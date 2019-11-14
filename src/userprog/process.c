@@ -20,7 +20,8 @@
 
 #define FILE_NAME_SIZE 256
 
-static thread_func start_process NO_RETURN;
+static thread_func start_process
+NO_RETURN;
 
 static bool load(const char *cmdline, void (**eip)(void), void **esp);
 
@@ -185,7 +186,8 @@ int process_wait(tid_t child_tid) {
     int exit_status;
 
     while (child != list_end(&(thread_current()->children))) {
-        t = list_entry(child, struct thread, child_elem);
+        t = list_entry(child,
+        struct thread, child_elem);
         if (t->tid == child_tid) {
             sema_down(&(t->child_sema));
             exit_status = t->exit_status;
@@ -413,8 +415,6 @@ bool load(const char *file_name, void (**eip)(void), void **esp) {
 
 /* load() helpers. */
 
-static bool install_page(void *upage, void *kpage, bool writable);
-
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
 static bool validate_segment(const struct Elf32_Phdr *phdr, struct file *file) {
@@ -537,7 +537,7 @@ static bool setup_stack(void **esp) {
    with palloc_get_page().
    Returns true on success, false if UPAGE is already mapped or
    if memory allocation fails. */
-static bool install_page(void *upage, void *kpage, bool writable) {
+bool install_page(void *upage, void *kpage, bool writable) {
     struct thread *t = thread_current();
 
     /* Verify that there's not already a page at that virtual

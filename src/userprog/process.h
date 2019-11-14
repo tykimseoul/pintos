@@ -15,5 +15,6 @@ void parse_filename(char *src, char *dest);
 
 void populate_stack(char *file_name, void **esp);
 
+bool install_page(void *upage, void *kpage, bool writable);
 
 #endif /* userprog/process.h */

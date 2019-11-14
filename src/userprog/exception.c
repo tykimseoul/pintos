@@ -5,6 +5,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "../threads/vaddr.h"
+#include "../vm/page.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -118,6 +119,9 @@ static void page_fault(struct intr_frame *f) {
     bool not_present;  /* True: not-present page, false: writing r/o page. */
     bool write;        /* True: access was write, false: access was read. */
     bool user;         /* True: access by user, false: access by kernel. */
+    bool in_user_stack;
+    bool contiguous;
+    bool small_enough;
     void *fault_addr;  /* Fault address. */
 
     /* Obtain faulting address, the virtual address that was
@@ -140,18 +144,43 @@ static void page_fault(struct intr_frame *f) {
     not_present = (f->error_code & PF_P) == 0;
     write = (f->error_code & PF_W) != 0;
     user = (f->error_code & PF_U) != 0;
-    if (!user || is_kernel_vaddr(fault_addr) || !fault_addr) {
-        exit(-1);
+    contiguous = fault_addr >= f->esp - 32;
+    void *upage = pg_round_down(fault_addr);
+    small_enough = PHYS_BASE - upage <= 1 << 23;
+    in_user_stack = fault_addr > 0x08048000;
+
+    bool load_success = false;
+    if (not_present && is_user_vaddr(fault_addr) && in_user_stack) {
+        //valid user address
+        struct supp_page_table_entry *spte = get_spte(upage);
+        if (spte) {
+            //entry exists, so load from somewhere
+            load_success = true;
+            printf("not yet implemented\n");
+            if (load_success)
+                return;
+        } else {
+            if (contiguous && small_enough) {
+                //grow the stack
+                void *frame = allocate_frame(upage, PAL_USER | PAL_ZERO, false);
+                if (frame) {
+                    load_success = true;
+                }
+            } else {
+                exit(-1);
+            }
+        }
     }
 
-    /* To implement virtual memory, delete the rest of the function
-       body, and replace it with code that brings in the page to
-       which fault_addr refers. */
-    printf("Page fault at %p: %s error %s page in %s context.\n",
-           fault_addr,
-           not_present ? "not present" : "rights violation",
-           write ? "writing" : "reading",
-           user ? "user" : "kernel");
-    kill(f);
+    if (!load_success) {
+        if (!user || is_kernel_vaddr(fault_addr) || !fault_addr) {
+            exit(-1);
+        }
+        printf("Page fault at %p: %s error %s page in %s context.\n",
+               fault_addr,
+               not_present ? "not present" : "rights violation",
+               write ? "writing" : "reading",
+               user ? "user" : "kernel");
+        kill(f);
+    }
 }
-
