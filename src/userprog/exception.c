@@ -155,6 +155,11 @@ static void page_fault(struct intr_frame *f) {
         struct supp_page_table_entry *spte = get_spte(upage);
         if (spte) {
             //entry exists, so load from somewhere
+            if (!spte->in_frame) {
+                //the frame is in swap, so reclaim
+            } else {
+                //this should not happen
+            }
             load_success = true;
             printf("not yet implemented\n");
             if (load_success)
@@ -170,6 +175,8 @@ static void page_fault(struct intr_frame *f) {
                 exit(-1);
             }
         }
+
+        //TODO read/write
     }
 
     if (!load_success) {

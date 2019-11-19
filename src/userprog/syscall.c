@@ -7,8 +7,12 @@
 #include "../devices/input.h"
 #include "../threads/vaddr.h"
 #include "../filesys/filesys.h"
+#include "../threads/palloc.h"
 
 static void syscall_handler(struct intr_frame *);
+
+static void can_i_read(void *uaddr, unsigned size);
+static void can_i_write(void *uaddr, unsigned size);
 
 struct lock file_lock;
 
@@ -163,18 +167,84 @@ int filesize(int fd) {
 }
 
 int read(int fd, void *buffer, unsigned size) {
+    int count = 0;
+    void *buffer_rd = pg_round_down(buffer);
+    void *buffer_page;
+
+    unsigned readsize = (unsigned) (buffer_rd + PGSIZE - buffer);
+    unsigned bytes_read = 0;
+    bool read = true;
+
+    can_i_read(buffer, size);
+//    if (buffer == NULL || !is_user_vaddr(buffer)) {
+//        printf("exit1");
+//        exit(-1);
+//    }
+//
+//    if (buffer + size == NULL || !is_user_vaddr(buffer + size)) {
+//        printf("exit2");
+//        exit(-1);
+//    }
+//
+//    if((char *) &fd - 4095 > buffer){
+//        exit(-1);
+//    }
+
+//    if (buffer == 0x08048000 || buffer_rd == 0x08048000) {
+//        exit(-1);
+//    }
+    for (buffer_page = buffer_rd; buffer_page <= buffer + size; buffer_page += PGSIZE) {
+        struct supp_page_table_entry *spte = get_spte(buffer_page);
+        if (!spte) {
+            if (!is_user_vaddr(buffer_page)) {
+                exit(-1);
+            }
+            allocate_frame(buffer_page, PAL_USER | PAL_ZERO, false);
+            count++;
+        }
+    }
     if (fd == 0) {
-        return (int) input_getc();
+        while (count < size) {
+            *((uint8_t * )(buffer + count)) = input_getc();
+            count++;
+        }
+        return size;
     } else if (fd == 1) {
         return 0;
-    } else {
+    } else if (size <= readsize) {
         struct file *reading_file = thread_current()->files[fd];
         check_file_validity(reading_file);
         return file_read(reading_file, buffer, size);
+    } else {
+        int result = 0;
+        while (read) {
+            struct file *reading_file = thread_current()->files[fd];
+            check_file_validity(reading_file);
+            bytes_read = file_read(reading_file, buffer, readsize);
+
+            //couldn't read all the bytes
+            if (bytes_read != readsize) {
+                read = false;
+            }
+
+            size -= bytes_read;
+
+            if (size == 0) {
+                read = false;
+            } else {
+                buffer += bytes_read;
+                if (size >= PGSIZE) readsize = PGSIZE;
+                else readsize = size;
+            }
+
+            result += bytes_read;
+        }
+        return result;
     }
 }
 
 int write(int fd, const void *buffer, unsigned size) {
+    can_i_write(buffer, size);
     if (fd == 0) {
         return -1;
     } else if (fd == 1) {
@@ -212,5 +282,23 @@ void check_address_validity(void *address) {
 
 void check_file_validity(struct file *file1) {
     if (!file1) exit(-1);
+}
+
+static void can_i_read(void *uaddr, unsigned size) {
+    void *ptr;
+    for (ptr = pg_round_down(uaddr); ptr < uaddr + size; ptr += PGSIZE) {
+        if (ptr == NULL || !is_user_vaddr(ptr) || ptr <= 0x08048000) {
+            exit(-1);
+        }
+    }
+}
+
+static void can_i_write(void *uaddr, unsigned size) {
+    void *ptr;
+    for (ptr = pg_round_down(uaddr); ptr < uaddr + size; ptr += PGSIZE) {
+        if (ptr == NULL || !is_user_vaddr(ptr) || pagedir_get_page(thread_current()->pagedir, ptr) == NULL) {
+            exit(-1);
+        }
+    }
 }
 
