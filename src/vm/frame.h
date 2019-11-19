@@ -23,8 +23,6 @@ struct frame_table_entry *add_to_frame_table(void *frame);
 
 struct frame_table_entry *get_fte_by_frame(void *frame);
 
-struct frame_table_entry *get_fte_by_spte(struct supp_page_table_entry *spte);
-
 struct frame_table_entry *get_frame_victim();
 
 void free_frame(void *kpage);

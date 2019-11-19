@@ -8,10 +8,12 @@
 #include "../threads/vaddr.h"
 #include "../filesys/filesys.h"
 #include "../threads/palloc.h"
+#include "../vm/page.h"
 
 static void syscall_handler(struct intr_frame *);
 
 static void can_i_read(void *uaddr, unsigned size);
+
 static void can_i_write(void *uaddr, unsigned size);
 
 struct lock file_lock;
@@ -176,23 +178,7 @@ int read(int fd, void *buffer, unsigned size) {
     bool read = true;
 
     can_i_read(buffer, size);
-//    if (buffer == NULL || !is_user_vaddr(buffer)) {
-//        printf("exit1");
-//        exit(-1);
-//    }
-//
-//    if (buffer + size == NULL || !is_user_vaddr(buffer + size)) {
-//        printf("exit2");
-//        exit(-1);
-//    }
-//
-//    if((char *) &fd - 4095 > buffer){
-//        exit(-1);
-//    }
 
-//    if (buffer == 0x08048000 || buffer_rd == 0x08048000) {
-//        exit(-1);
-//    }
     for (buffer_page = buffer_rd; buffer_page <= buffer + size; buffer_page += PGSIZE) {
         struct supp_page_table_entry *spte = get_spte(buffer_page);
         if (!spte) {
@@ -286,8 +272,16 @@ void check_file_validity(struct file *file1) {
 
 static void can_i_read(void *uaddr, unsigned size) {
     void *ptr;
+    struct thread *current = thread_current();
     for (ptr = pg_round_down(uaddr); ptr < uaddr + size; ptr += PGSIZE) {
         if (ptr == NULL || !is_user_vaddr(ptr) || ptr <= 0x08048000) {
+            exit(-1);
+        }
+        if (get_spte(ptr) != NULL) {
+            if (get_spte(ptr)->owner != current) {
+                exit(-1);
+            }
+        } else {
             exit(-1);
         }
     }

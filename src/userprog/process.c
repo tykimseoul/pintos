@@ -20,6 +20,12 @@
 
 #define FILE_NAME_SIZE 256
 
+#ifndef VM
+// alternative of vm-related functions introduced in Project 3
+#define allocate_frame(x, y) palloc_get_page(y)
+#define free_frame(x) palloc_free_page(x)
+#endif
+
 static thread_func start_process
 NO_RETURN;
 
@@ -122,6 +128,9 @@ static void start_process(void *file_name_) {
 }
 
 void populate_stack(char *file_name, void **esp) {
+    // added for vm
+    *esp = PHYS_BASE;
+
     int argc = 0;
     char file_name_copy[256];
     strlcpy(file_name_copy, file_name, strlen(file_name) + 1);
@@ -486,22 +495,19 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
         /* Get a page of memory. */
-        uint8_t *kpage = palloc_get_page(PAL_USER);
+        uint8_t *kpage = allocate_frame(upage, PAL_USER);
+
         if (kpage == NULL)
             return false;
 
         /* Load this page. */
         if (file_read(file, kpage, page_read_bytes) != (int) page_read_bytes) {
-            palloc_free_page(kpage);
+            free_frame(kpage);
             return false;
         }
         memset(kpage + page_read_bytes, 0, page_zero_bytes);
 
         /* Add the page to the process's address space. */
-        if (!install_page(upage, kpage, writable)) {
-            palloc_free_page(kpage);
-            return false;
-        }
 
         /* Advance. */
         read_bytes -= page_read_bytes;
@@ -517,13 +523,9 @@ static bool setup_stack(void **esp) {
     uint8_t *kpage;
     bool success = false;
 
-    kpage = palloc_get_page(PAL_USER | PAL_ZERO);
-    if (kpage != NULL) {
-        success = install_page(((uint8_t * )PHYS_BASE) - PGSIZE, kpage, true);
-        if (success)
-            *esp = PHYS_BASE;
-        else
-            palloc_free_page(kpage);
+    kpage = allocate_frame(PHYS_BASE - PGSIZE, PAL_USER | PAL_ZERO);
+    if (kpage) {
+        success = true;
     }
     return success;
 }

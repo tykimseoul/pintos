@@ -183,6 +183,9 @@ static void page_fault(struct intr_frame *f) {
         if (!user || is_kernel_vaddr(fault_addr) || !fault_addr) {
             exit(-1);
         }
+        if(user &&!write&&not_present){
+            exit(-1);
+        }
         printf("Page fault at %p: %s error %s page in %s context.\n",
                fault_addr,
                not_present ? "not present" : "rights violation",
