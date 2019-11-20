@@ -16,13 +16,14 @@ struct supp_page_table_entry {
     struct thread *owner;
     struct list_elem page_elem;
     bool in_frame;
+    bool writable;
     struct frame_table_entry *fte;
     size_t swap_slot;
 };
 
 void init_page_sys();
 
-struct supp_page_table_entry *add_to_supp_page_table(struct frame_table_entry *fte, void *upage);
+struct supp_page_table_entry *add_to_supp_page_table(struct frame_table_entry *fte, void *upage, bool writable);
 
 struct supp_page_table_entry *get_spte(void *upage);
 

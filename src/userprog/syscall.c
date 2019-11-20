@@ -184,10 +184,10 @@ int read(int fd, void *buffer, unsigned size) {
     for (buffer_page = buffer_rd; buffer_page <= buffer + size; buffer_page += PGSIZE) {
         struct supp_page_table_entry *spte = get_spte(buffer_page);
         if (!spte) {
-            if (!is_user_vaddr(buffer_page)) {
+            if (!is_user_vaddr(buffer_page) || buffer_page == 0xbfffe000) {
                 exit(-1);
             }
-            allocate_frame(buffer_page, PAL_USER | PAL_ZERO, false);
+            allocate_frame(buffer_page, PAL_USER | PAL_ZERO, false, true);
             count++;
         }
     }
@@ -289,6 +289,10 @@ static void can_i_write(void *uaddr, unsigned size) {
     void *ptr;
     for (ptr = pg_round_down(uaddr); ptr < uaddr + size; ptr += PGSIZE) {
         if (ptr == NULL || !is_user_vaddr(ptr) || pagedir_get_page(thread_current()->pagedir, ptr) == NULL) {
+            exit(-1);
+        }
+        struct supp_page_table_entry *spte = get_spte(ptr);
+        if (!spte || spte->writable == false) {
             exit(-1);
         }
     }

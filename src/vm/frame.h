@@ -17,7 +17,7 @@ struct frame_table_entry {
 
 void init_frame_sys();
 
-void *allocate_frame(void *upage, enum palloc_flags flags, bool in_swap);
+void *allocate_frame(void *upage, enum palloc_flags flags, bool in_swap, bool writable);
 
 struct frame_table_entry *add_to_frame_table(void *frame);
 

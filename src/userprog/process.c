@@ -495,7 +495,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
         /* Get a page of memory. */
-        uint8_t *kpage = allocate_frame(upage, PAL_USER);
+        uint8_t *kpage = allocate_frame(upage, PAL_USER, false, writable);
 
         if (kpage == NULL)
             return false;
@@ -523,7 +523,7 @@ static bool setup_stack(void **esp) {
     uint8_t *kpage;
     bool success = false;
 
-    kpage = allocate_frame(PHYS_BASE - PGSIZE, PAL_USER | PAL_ZERO);
+    kpage = allocate_frame(PHYS_BASE - PGSIZE, PAL_USER | PAL_ZERO, false, true);
     if (kpage) {
         success = true;
     }

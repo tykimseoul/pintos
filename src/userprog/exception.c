@@ -167,7 +167,7 @@ static void page_fault(struct intr_frame *f) {
         } else {
             if (contiguous && small_enough) {
                 //grow the stack
-                void *frame = allocate_frame(upage, PAL_USER | PAL_ZERO, false);
+                void *frame = allocate_frame(upage, PAL_USER | PAL_ZERO, false, true);
                 if (frame) {
                     load_success = true;
                 }
@@ -183,7 +183,10 @@ static void page_fault(struct intr_frame *f) {
         if (!user || is_kernel_vaddr(fault_addr) || !fault_addr) {
             exit(-1);
         }
-        if(user &&!write&&not_present){
+        if (user && !write && not_present) {
+            exit(-1);
+        }
+        if (user && write && !not_present) {
             exit(-1);
         }
         printf("Page fault at %p: %s error %s page in %s context.\n",

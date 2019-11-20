@@ -13,7 +13,7 @@ void init_frame_sys() {
 }
 struct frame_table_entry *get_fte_by_spte(struct supp_page_table_entry *spte);
 
-void *allocate_frame(void *upage, enum palloc_flags flags, bool in_swap) {
+void *allocate_frame(void *upage, enum palloc_flags flags, bool in_swap, bool writable) {
     lock_acquire(&frame_lock);
     void *frame = (void *) palloc_get_page(PAL_USER | flags);
 
@@ -32,13 +32,13 @@ void *allocate_frame(void *upage, enum palloc_flags flags, bool in_swap) {
         return NULL;
     }
     if (!in_swap) {
-        struct supp_page_table_entry *spte = add_to_supp_page_table(fte, upage);
+        struct supp_page_table_entry *spte = add_to_supp_page_table(fte, upage, writable);
         if (!spte) {
             free(fte);
             lock_release(&frame_lock);
             return NULL;
         }
-        bool installed = install_page(upage, frame, true);
+        bool installed = install_page(upage, frame, writable);
         if (!installed) {
             free(fte);
             free(spte);

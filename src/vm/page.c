@@ -21,7 +21,7 @@ struct supp_page_table_entry *get_spte(void *upage) {
     return NULL;
 }
 
-struct supp_page_table_entry *add_to_supp_page_table(struct frame_table_entry *fte, void *upage) {
+struct supp_page_table_entry *add_to_supp_page_table(struct frame_table_entry *fte, void *upage, bool writable) {
     struct supp_page_table_entry *spte = malloc(sizeof(struct supp_page_table_entry));
     if (!spte) {
         return NULL;
@@ -29,6 +29,7 @@ struct supp_page_table_entry *add_to_supp_page_table(struct frame_table_entry *f
     spte->owner = thread_current();
     spte->user_vaddr = pg_round_down(upage);
     spte->in_frame = true;
+    spte->writable = writable;
     spte->fte = fte;
     lock_acquire(&page_lock);
     list_push_back(&supp_page_table, &spte->page_elem);
