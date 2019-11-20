@@ -87,7 +87,9 @@ static void syscall_handler(struct intr_frame *f UNUSED) {
             int fd = *((int *) f->esp + 1);
             void *buffer = (void *) (*((int *) f->esp + 2));
             unsigned size = *((unsigned *) f->esp + 3);
+            lock_acquire(&file_lock);
             f->eax = write(fd, buffer, size);
+            lock_release(&file_lock);
             break;
         }
         case SYS_SEEK: {
@@ -277,11 +279,7 @@ static void can_i_read(void *uaddr, unsigned size) {
         if (ptr == NULL || !is_user_vaddr(ptr) || ptr <= 0x08048000) {
             exit(-1);
         }
-        if (get_spte(ptr) != NULL) {
-            if (get_spte(ptr)->owner != current) {
-                exit(-1);
-            }
-        } else {
+        if (get_spte(ptr) == NULL) {
             exit(-1);
         }
     }
