@@ -144,10 +144,16 @@ static void page_fault(struct intr_frame *f) {
     not_present = (f->error_code & PF_P) == 0;
     write = (f->error_code & PF_W) != 0;
     user = (f->error_code & PF_U) != 0;
-    contiguous = fault_addr >= f->esp - 32;
+
+// section 4.3.3
+    void *esp = user ? f->esp : thread_current()->esp;
+
+//    contiguous = (uint32_t *) fault_addr >= (uint32_t * )(esp) - 32;
+    contiguous = (esp <= fault_addr || fault_addr == f->esp - 4 || fault_addr == f->esp - 32);
     void *upage = pg_round_down(fault_addr);
     small_enough = PHYS_BASE - upage <= 1 << 23;
-    in_user_stack = fault_addr > 0x08048000;
+//    small_enough = (PHYS_BASE - 0x800000 <= fault_addr && fault_addr < PHYS_BASE);
+    in_user_stack = fault_addr > 0x08048000 && fault_addr < PHYS_BASE;
 
     bool load_success = false;
     if (not_present && is_user_vaddr(fault_addr) && in_user_stack) {
@@ -157,29 +163,39 @@ static void page_fault(struct intr_frame *f) {
             //entry exists, so load from somewhere
             if (!spte->in_frame) {
                 //the frame is in swap, so reclaim
+                load_success = load_page_from_swap(spte);
             } else {
                 //this should not happen
+                printf("should not happen\n");
             }
-            load_success = true;
-            printf("not yet implemented\n");
-            if (load_success)
+            if (load_success) {
                 return;
+            } else {
+                load_success = true;
+                printf("mmap not yet implemented\n");
+            }
         } else {
+//            printf("%d %d\n", contiguous, small_enough);
             if (contiguous && small_enough) {
                 //grow the stack
-                void *frame = allocate_frame(upage, PAL_USER | PAL_ZERO, false, true);
+                void *frame = allocate_frame(upage, PAL_USER | PAL_ZERO, true);
                 if (frame) {
                     load_success = true;
                 }
-            } else {
-                exit(-1);
+//            } else {
+//                exit(-1);
             }
         }
-
-        //TODO read/write
     }
 
     if (!load_success) {
+//        printf("%d %d %p\n", user, is_kernel_vaddr(fault_addr), fault_addr);
+//        if (!user) { // kernel mode
+//            printf("hihi\n");
+//            f->eip = (void *) f->eax;
+//            f->eax = 0xffffffff;
+//            return;
+//        }
         if (!user || is_kernel_vaddr(fault_addr) || !fault_addr) {
             exit(-1);
         }

@@ -18,12 +18,19 @@ static void can_i_write(void *uaddr, unsigned size);
 
 struct lock file_lock;
 
+static int get_user (const uint8_t *uaddr);
+
+static bool put_user (uint8_t *udst, uint8_t byte);
+
+static void check_user(const uint8_t *uaddr);
+
 void syscall_init(void) {
     lock_init(&file_lock);
     intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
 static void syscall_handler(struct intr_frame *f UNUSED) {
+    thread_current()->esp=f->esp;
     switch (*(int *) f->esp) {
         case SYS_HALT:
             halt();
@@ -130,6 +137,7 @@ void exit(int status) {
 }
 
 pid_t exec(const char *cmd_line) {
+    check_user((const uint8_t *)cmd_line);
     return process_execute(cmd_line);
 }
 
@@ -138,16 +146,19 @@ int wait(pid_t pid) {
 }
 
 bool create(const char *file, unsigned initial_size) {
+    check_user((const uint8_t *)file);
     check_file_validity(file);
     return filesys_create(file, initial_size);
 }
 
 bool remove(const char *file) {
+    check_user((const uint8_t *)file);
     check_file_validity(file);
     return filesys_remove(file);
 }
 
 int open(const char *file) {
+    check_user((const uint8_t *)file);
     check_file_validity(file);
     struct file *open_file = filesys_open(file);
     if (open_file) {
@@ -171,6 +182,8 @@ int filesize(int fd) {
 }
 
 int read(int fd, void *buffer, unsigned size) {
+    check_user((const uint8_t *)buffer);
+    check_user((const uint8_t *)buffer+size-1);
     int count = 0;
     void *buffer_rd = pg_round_down(buffer);
     void *buffer_page;
@@ -187,13 +200,22 @@ int read(int fd, void *buffer, unsigned size) {
             if (!is_user_vaddr(buffer_page) || buffer_page == 0xbfffe000) {
                 exit(-1);
             }
-            allocate_frame(buffer_page, PAL_USER | PAL_ZERO, false, true);
+            allocate_frame(buffer_page, PAL_USER | PAL_ZERO, true);
             count++;
         }
     }
     if (fd == 0) {
+//        while (count < size) {
+//            *((uint8_t * )(buffer + count)) = input_getc();
+//            count++;
+//        }
         while (count < size) {
-            *((uint8_t * )(buffer + count)) = input_getc();
+            if(!put_user(*((uint8_t * )(buffer + count)), input_getc())){
+                printf("in read5\n");
+                if(lock_held_by_current_thread(&file_lock))
+                    lock_release(&file_lock);
+                exit(-1);
+            }
             count++;
         }
         return size;
@@ -232,6 +254,8 @@ int read(int fd, void *buffer, unsigned size) {
 }
 
 int write(int fd, const void *buffer, unsigned size) {
+    check_user((const uint8_t *)buffer);
+    check_user((const uint8_t *)buffer+size-1);
     can_i_write(buffer, size);
     if (fd == 0) {
         return -1;
@@ -279,9 +303,6 @@ static void can_i_read(void *uaddr, unsigned size) {
         if (ptr == NULL || !is_user_vaddr(ptr) || ptr <= 0x08048000) {
             exit(-1);
         }
-        if (get_spte(ptr) == NULL) {
-            exit(-1);
-        }
     }
 }
 
@@ -295,6 +316,45 @@ static void can_i_write(void *uaddr, unsigned size) {
         if (!spte || spte->writable == false) {
             exit(-1);
         }
+    }
+}
+
+/* Reads a byte at user virtual address UADDR.
+   UADDR must be below PHYS_BASE.
+   Returns the byte value if successful, -1 if a segfault
+   occurred. */
+static int get_user (const uint8_t *uaddr)
+{
+    if(!((void*)uaddr<PHYS_BASE)){
+        return -1;
+    }
+    int result;
+    asm ("movl $1f, %0; movzbl %1, %0; 1:"
+    : "=&a" (result) : "m" (*uaddr));
+    return result;
+}
+
+/* Writes BYTE to user address UDST.
+   UDST must be below PHYS_BASE.
+   Returns true if successful, false if a segfault occurred. */
+static bool
+put_user (uint8_t *udst, uint8_t byte)
+{
+    if(!((void*)udst<PHYS_BASE)){
+        return false;
+    }
+    int error_code;
+    asm ("movl $1f, %0; movb %b2, %1; 1:"
+    : "=&a" (error_code), "=m" (*udst) : "q" (byte));
+    return error_code != -1;
+}
+
+static void check_user(const uint8_t *uaddr){
+    if(get_user(uaddr)==-1){
+        if(lock_held_by_current_thread(&file_lock)){
+            lock_release(&file_lock);
+        }
+        exit(-1);
     }
 }
 

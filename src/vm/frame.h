@@ -17,7 +17,7 @@ struct frame_table_entry {
 
 void init_frame_sys();
 
-void *allocate_frame(void *upage, enum palloc_flags flags, bool in_swap, bool writable);
+void *allocate_frame(void *upage, enum palloc_flags flags, bool writable);
 
 struct frame_table_entry *add_to_frame_table(void *frame);
 
@@ -27,6 +27,6 @@ struct frame_table_entry *get_frame_victim();
 
 void free_frame(void *kpage);
 
-void evict_frame(struct frame_table_entry *victim);
+bool evict_frame();
 
 bool reclaim_frame(struct supp_page_table_entry *entry);

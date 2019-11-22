@@ -27,4 +27,8 @@ struct supp_page_table_entry *add_to_supp_page_table(struct frame_table_entry *f
 
 struct supp_page_table_entry *get_spte(void *upage);
 
+struct supp_page_table_entry *get_spte_from_fte(struct frame_table_entry *fte);
+
+bool load_page_from_swap(struct supp_page_table_entry *spte);
+
 void free_page(struct supp_page_table_entry *spte);
