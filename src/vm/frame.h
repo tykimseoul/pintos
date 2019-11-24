@@ -9,7 +9,8 @@
 static struct list frame_table;
 struct lock frame_lock;
 
-struct frame_table_entry {
+struct frame_table_entry
+{
     void *frame;
     struct thread *owner;
     struct list_elem frame_elem;
