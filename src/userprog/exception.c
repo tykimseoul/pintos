@@ -166,11 +166,11 @@ static void page_fault(struct intr_frame *f)
 
     bool load_success = false;
 
-    // printf("Page fault at %p: %s error %s page in %s context.\n",
-    //        fault_addr,
-    //        not_present ? "not present" : "rights violation",
-    //        write ? "writing" : "reading",
-    //        user ? "user" : "kernel");
+    printf("\nPAGE FAULT at %p: %s error %s page in %s context.\n",
+           fault_addr,
+           not_present ? "not present" : "rights violation",
+           write ? "writing" : "reading",
+           user ? "user" : "kernel");
 
     if (not_present && is_user_vaddr(fault_addr) && in_user_stack)
     {
@@ -179,49 +179,31 @@ static void page_fault(struct intr_frame *f)
         if (spte)
         {
             //entry exists, so load from somewhere
-            // printf("got spte\n");
-            if (spte->status == FSYS)
+            printf("got spte\n");
+            switch (spte->status)
+            {
+            case FSYS:
             {
                 //the data required is in the filesys and is being accessed for the first time. Load it.
-                // printf("loading from filesys...\n");
+                printf("loading from filesys... spte: %p\n", upage);
                 void *frame = allocate_frame(upage, PAL_USER | PAL_ZERO, spte->writable);
-
+                printf("frame allocated: %p\n", frame);
                 if (!frame)
                 {
-                    // printf("allocation failed\n");
+                    printf("allocation failed\n");
                     exit(-1);
                 }
 
-                spte->fte = get_fte_by_frame(frame);
-                spte->status = IN_FRAME;
-                spte->dirty = false;
-
-                bool installed = install_page(upage, frame, spte->writable);
-                if (!installed)
-                {
-                    // printf("install failed\n");
-                    free_page(spte);
-                    exit(-1);
-                }
-
-                // file_seek(spte->file, spte->ofs);
-                // if (file_read(spte->file, frame, spte->read_bytes) != (off_t)spte->read_bytes)
-                // {
-                //     free_frame(frame);
-                //     printf("failed to read file\n");
-                //     exit(-1);
-                // }
-                // memset(frame + spte->read_bytes, 0, spte->zero_bytes);
-
-                // printf("reading file: %p\n", spte->file);
-                // printf("seeking file to position: %d\n", (int)spte->ofs);
+                printf("reading file: %p\n", spte->file);
+                printf("seeking file to position: %d\n", (int)spte->ofs);
                 file_seek(spte->file, spte->ofs);
 
                 // read bytes from the file
                 off_t no_read = file_read(spte->file, frame, (off_t)spte->read_bytes);
-                // printf("n_read: %d , read_bytes: %d\n", no_read, (int)spte->read_bytes);
+                printf("n_read: %d , read_bytes: %d\n", no_read, (int)spte->read_bytes);
                 if (no_read != spte->read_bytes)
                 {
+                    free_frame(frame);
                     printf("failed to read file\n");
                     exit(-1);
                 }
@@ -230,19 +212,67 @@ static void page_fault(struct intr_frame *f)
                 ASSERT(spte->read_bytes + spte->zero_bytes == PGSIZE);
                 memset(frame + no_read, 0, spte->zero_bytes);
 
+                spte->status = IN_FRAME;
+                printf("setting page status: in frame %d (in exception)\n", spte->status);
+
+                spte->fte = get_fte_by_frame(frame);
+                printf("putting in fte: %p\n        in spte: %p\n", spte->fte, spte);
+
+                spte->dirty = false;
+
+                printf("installing page\n");
+                bool installed = install_page(upage, frame, spte->writable);
+                if (!installed)
+                {
+                    printf("install failed\n");
+                    free_page(spte);
+                    exit(-1);
+                }
+
                 load_success = true;
+                break;
             }
-            else if (spte->status == IN_SWAP)
+            case IN_SWAP:
             {
                 //the frame is in swap, so reclaim
-                // printf("reclaiming...\n");
+                printf("reclaiming...\n");
                 load_success = load_page_from_swap(spte);
+                break;
             }
-            else
+            default:
             {
                 //this should not happen
-                printf("should not happen\n");
-                printf("%d\n", spte->status);
+                printf("unrecognized page status: ");
+                switch (spte->status)
+                {
+                case IN_FRAME:
+                    printf("in frame %d\n", spte->status);
+                    break;
+
+                case IN_SWAP:
+                    printf("in swap\n");
+                    break;
+
+                case FSYS:
+                    printf("lazy\n");
+                    break;
+
+                case ALLZERO:
+                    printf("all zero\n");
+                    break;
+
+                default:
+                    printf("status garbage\n");
+                }
+                printf("retarded page: %p\n", upage);
+                printf("retarded spte: %p\n", spte);
+                printf("retarded fte: %p\n", spte->fte);
+                printf("retarded frame: %p\n", spte->fte->frame);
+                if (!spte->fte)
+                {
+                    printf("null fte\n");
+                }
+            }
             }
             if (load_success)
             {
@@ -257,18 +287,18 @@ static void page_fault(struct intr_frame *f)
         }
         else
         {
-            // printf("no spte\n");
-            //            printf("%d %d\n", contiguous, small_enough);
+            printf("no spte\n");
+            printf("%d %d\n", contiguous, small_enough);
             if (contiguous && small_enough)
             {
                 //grow the stack
-                // printf("growing stack...\n");
+                printf("growing stack...\n");
                 void *frame = allocate_frame(upage, PAL_USER | PAL_ZERO, true);
                 struct supp_page_table_entry *spte = make_spte(frame, upage, true);
                 if (frame)
                 {
                     load_success = true;
-                    // printf("stack growth success\n");
+                    printf("stack growth success\n");
                 }
                 //            } else {
                 //                exit(-1);

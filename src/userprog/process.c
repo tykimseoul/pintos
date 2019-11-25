@@ -1,5 +1,3 @@
-#include "../userprog/process.h"
-#include <debug.h>
 #include <inttypes.h>
 #include <round.h>
 #include <stdio.h>
@@ -8,6 +6,9 @@
 #include "../userprog/gdt.h"
 #include "../userprog/pagedir.h"
 #include "../userprog/tss.h"
+#include "../userprog/process.h"
+#include "../userprog/syscall.h"
+
 #include "../filesys/directory.h"
 #include "../filesys/file.h"
 #include "../filesys/filesys.h"
@@ -244,6 +245,7 @@ void process_exit(void)
         file_allow_write(cur->exec_file);
         file_close(cur->exec_file);
     }
+    // close_all_files(cur);
 
     pd = cur->pagedir;
     if (pd != NULL)
@@ -373,6 +375,17 @@ bool load(const char *file_name, void (**eip)(void), void **esp)
         printf("load: %s: open failed\n", file_name);
         goto done;
     }
+    // else
+    // {
+    //     //add to the file descriptor
+    //     for (int i = 2; i < FILE_MAX_COUNT; i++)
+    //     {
+    //         if (thread_current()->files[i] == NULL)
+    //         {
+    //             thread_current()->files[i] = file;
+    //         }
+    //     }
+    // }
 
     /* Read and verify executable header. */
     if (file_read(file, &ehdr, sizeof ehdr) != sizeof ehdr || memcmp(ehdr.e_ident, "\177ELF\1\1\1", 7) || ehdr.e_type != 2 || ehdr.e_machine != 3 || ehdr.e_version != 1 || ehdr.e_phentsize != sizeof(struct Elf32_Phdr) || ehdr.e_phnum > 1024)
@@ -448,7 +461,6 @@ bool load(const char *file_name, void (**eip)(void), void **esp)
 
     file_deny_write(file);
     thread_current()->exec_file = file;
-
     success = true;
 
 done:
@@ -583,11 +595,12 @@ static bool setup_stack(void **esp)
     uint8_t *kpage;
     bool success = false;
 
-    // printf("making a page in setup stack...\n");
+    printf("making a page in setup stack...\n");
     kpage = allocate_frame(PHYS_BASE - PGSIZE, PAL_USER | PAL_ZERO, true);
     struct supp_page_table_entry *spte = make_spte(kpage, PHYS_BASE - PGSIZE, true);
     if (spte)
     {
+        printf("SUCCESS making spte at %p in setup_stack\n", spte);
         success = true;
     }
     return success;

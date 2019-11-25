@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <debug.h>
+#include "../threads/thread.h"
 
 typedef int pid_t;
 

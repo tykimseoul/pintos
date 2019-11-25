@@ -78,6 +78,7 @@ static void syscall_handler(struct intr_frame *f UNUSED)
         check_address_validity(f->esp);
         const char *file = (const char *)*((int *)f->esp + 1);
         lock_acquire(&file_lock);
+        // printf("opening file...\n");
         f->eax = open(file);
         lock_release(&file_lock);
         break;
@@ -99,6 +100,7 @@ static void syscall_handler(struct intr_frame *f UNUSED)
         void *buffer = (void *)(*((int *)f->esp + 2));
         unsigned size = *((unsigned *)f->esp + 3);
         lock_acquire(&file_lock);
+        // printf("reading file...\n");
         f->eax = read(fd, buffer, size);
         lock_release(&file_lock);
         break;
@@ -350,6 +352,23 @@ void close(int fd)
     thread_current()->files[fd] = NULL;
     file_close(closing_file);
 }
+
+// void close_all_files(struct thread *cur)
+// {
+//     for (int i = 2; i < FILE_MAX_COUNT; i++)
+//     {
+//         if (cur->files[i] != NULL)
+//         {
+//             struct file *closing_file = cur->files[i];
+//             printf("checking for validity\n");
+//             check_file_validity(closing_file);
+//             cur->files[i] = NULL;
+//             printf("file valid, closing...\n");
+//             file_close(closing_file);
+//             printf("file_close success\n");
+//         }
+//     }
+// }
 
 void check_address_validity(void *address)
 {
