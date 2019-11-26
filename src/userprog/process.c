@@ -19,6 +19,10 @@
 #include "../threads/thread.h"
 #include "../threads/vaddr.h"
 
+#ifdef VM
+#include "../vm/page.h"
+#endif
+
 #define FILE_NAME_SIZE 256
 
 static thread_func start_process
@@ -142,7 +146,7 @@ static void start_process(void *file_name_)
 void populate_stack(char *file_name, void **esp)
 {
     // added for vm
-    *esp = PHYS_BASE;
+    // *esp = PHYS_BASE;
 
     int argc = 0;
     char file_name_copy[256];
@@ -364,6 +368,7 @@ bool load(const char *file_name, void (**eip)(void), void **esp)
 
     /* Allocate and activate page directory. */
     t->pagedir = pagedir_create();
+
     if (t->pagedir == NULL)
         goto done;
     process_activate();
@@ -387,6 +392,8 @@ bool load(const char *file_name, void (**eip)(void), void **esp)
     //     }
     // }
 
+    file_deny_write(file);
+    t->exec_file = file;
     /* Read and verify executable header. */
     if (file_read(file, &ehdr, sizeof ehdr) != sizeof ehdr || memcmp(ehdr.e_ident, "\177ELF\1\1\1", 7) || ehdr.e_type != 2 || ehdr.e_machine != 3 || ehdr.e_version != 1 || ehdr.e_phentsize != sizeof(struct Elf32_Phdr) || ehdr.e_phnum > 1024)
     {
@@ -459,15 +466,17 @@ bool load(const char *file_name, void (**eip)(void), void **esp)
     /* Start address. */
     *eip = (void (*)(void))ehdr.e_entry;
 
-    file_deny_write(file);
-    thread_current()->exec_file = file;
     success = true;
 
 done:
     /* We arrive here whether the load is successful or not. */
     //we do not want to close the file here so we can lazy load it later
     //so we keep it open until the thread terminates
-    // file_close(file);
+    if (!success)
+    {
+        t->exec_file = NULL;
+        file_close(file);
+    }
     return success;
 }
 
@@ -548,10 +557,10 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
 
 #ifdef VM
         // Lazy load
-        struct thread *curr = thread_current();
-        ASSERT(pagedir_get_page(curr->pagedir, upage) == NULL); // no virtual page yet?
+        struct thread *current_thread = thread_current();
+        ASSERT(pagedir_get_page(current_thread->pagedir, upage) == NULL); // no virtual page yet?
 
-        if (!make_spte_filesys(upage, file, ofs, page_read_bytes, page_zero_bytes, writable))
+        if (!make_spte_filesys(&current_thread->spt, upage, file, ofs, page_read_bytes, page_zero_bytes, writable))
         {
             printf("failed to make a filesys spte\n");
             return false;
@@ -595,13 +604,26 @@ static bool setup_stack(void **esp)
     uint8_t *kpage;
     bool success = false;
 
-    printf("making a page in setup stack...\n");
+// printf("making a page in setup stack...\n");
+#ifdef VM
     kpage = allocate_frame(PHYS_BASE - PGSIZE, PAL_USER | PAL_ZERO, true);
-    struct supp_page_table_entry *spte = make_spte(kpage, PHYS_BASE - PGSIZE, true);
+#else
+    kpage = palloc_get_page(PAL_USER | PAL_ZERO);
+#endif
+    struct supp_page_table_entry *spte = make_spte(&thread_current()->spt, kpage, PHYS_BASE - PGSIZE, true);
     if (spte)
     {
-        printf("SUCCESS making spte at %p in setup_stack\n", spte);
+        // printf("SUCCESS making spte at %p in setup_stack\n", spte);
+        *esp = PHYS_BASE;
         success = true;
+    }
+    else
+    {
+#ifdef VM
+        free_frame(kpage);
+#else
+        palloc_free_page(kpage);
+#endif
     }
     return success;
 }

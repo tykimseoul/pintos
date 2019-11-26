@@ -93,7 +93,6 @@ struct thread
     int priority;              /* Priority. */
     struct list_elem allelem;  /* List element for all threads list. */
     int64_t wakeup_time;       /* time to wake up */
-    void *esp;                 /* esp of this thread */
 
     struct file *exec_file;
 
@@ -111,6 +110,9 @@ struct thread
     bool load_success;                  // store result of load
     struct semaphore exit_sema;         // separate semaphore for exiting
 #endif
+
+    struct list spt; /*supplementary page table of this thread*/
+    void *esp;                  /* esp of this thread */
 
     /* Owned by thread.c. */
     unsigned magic; /* Detects stack overflow. */

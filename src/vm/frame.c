@@ -21,9 +21,14 @@ void *allocate_frame(void *upage, enum palloc_flags flags, bool writable)
 {
     lock_acquire(&frame_lock);
     printf("ALLOCATE FRAME------------- at %p\n", upage);
-    void *frame = (void *)palloc_get_page(PAL_USER | flags);
+    if (upage < 4096)
+    {
+        PANIC("YO WTF\n");
+    }
+    void *frame = (void *)palloc_get_page(flags);
 
-    if (!frame)
+    //null is different from 0
+    if (!frame || frame == 0)
     {
         //evict
         printf("no frame, trying to evict...\n");
@@ -31,7 +36,11 @@ void *allocate_frame(void *upage, enum palloc_flags flags, bool writable)
         lock_acquire(&frame_lock);
         if (eviction_success)
         {
-            frame = (void *)palloc_get_page(PAL_USER | flags);
+            if (upage < 4096)
+            {
+                PANIC("YO WTF\n");
+            }
+            frame = (void *)palloc_get_page(flags);
         }
         else
         {
@@ -39,20 +48,20 @@ void *allocate_frame(void *upage, enum palloc_flags flags, bool writable)
         }
     }
     printf("got frame, adding to frame table...\n");
-    if (!frame)
+    if (!frame || frame == 0)
     {
         PANIC("cannot allocate frame\n");
     }
     struct frame_table_entry *fte = add_to_frame_table(frame);
     if (!fte)
     {
-
-        free(fte);
+        printf("failed to make fte for some reason\n");
+        // free(fte);
         palloc_free_page(frame);
         lock_release(&frame_lock);
         return NULL;
     }
-    printf("allocate frame success\n\n");
+    printf("allocate frame: %p success\n\n", frame);
     lock_release(&frame_lock);
     return frame;
 }
@@ -62,10 +71,14 @@ struct frame_table_entry *add_to_frame_table(void *frame)
     struct frame_table_entry *fte = malloc(sizeof(struct frame_table_entry));
     if (!fte)
     {
-        free(fte);
-        palloc_free_page(frame);
         printf("adding to frame table FAILED\n");
+        // free(fte);
+        palloc_free_page(frame);
         return NULL;
+    }
+    if (frame == 0 || frame == NULL)
+    {
+        PANIC("yo i got no frame\n");
     }
     fte->frame = frame;
     fte->owner = thread_current();
@@ -84,7 +97,7 @@ struct frame_table_entry *get_fte_by_frame(void *frame)
             return fte;
         }
     }
-    printf("no fte... :(\n");
+    // printf("no fte... :(\n");
     return NULL;
 }
 
@@ -125,11 +138,13 @@ bool evict_frame()
 {
     printf("\nEVICTING----------------------\n");
     struct frame_table_entry *victim_fte = get_frame_victim();
-    struct supp_page_table_entry *victim_spte = get_spte_from_fte(victim_fte);
+    printf("got frame victim: %p\n", victim_fte->frame);
+    struct supp_page_table_entry *victim_spte = get_spte_from_fte(&thread_current()->spt, victim_fte);
     ASSERT(victim_spte);
 
     //set the swap slot at index idx to be the data in the frame
-    size_t idx = swap_out_of_memory(victim_spte->user_vaddr);
+    size_t idx = swap_out_of_memory(victim_fte->frame);
+    printf("successfully swapped out of memory at index: %d\n", idx);
 
     free_frame(victim_fte->frame);
 
@@ -138,7 +153,7 @@ bool evict_frame()
     victim_spte->status = IN_SWAP;
     victim_spte->swap_slot = idx;
 
-    // printf("eviction success\n\n");
+    printf("eviction success\n\n");
     return true;
 }
 

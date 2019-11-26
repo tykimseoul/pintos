@@ -9,7 +9,6 @@
 #include "../filesys/off_t.h"
 #include "../filesys/file.h"
 
-static struct list supp_page_table;
 static struct lock page_lock;
 
 enum page_status
@@ -40,18 +39,20 @@ struct supp_page_table_entry
 
 void init_page_sys();
 
-struct supp_page_table_entry *make_spte(void *frame, void *upage, bool writable);
+struct list *create_supp_page_table();
 
-struct supp_page_table_entry *make_spte_filesys(void *page, struct file *file,
+struct supp_page_table_entry *make_spte(struct list *spt, void *frame, void *upage, bool writable);
+
+struct supp_page_table_entry *make_spte_filesys(struct list *spt, void *page, struct file *file,
                                                 off_t offset, uint32_t read_bytes, uint32_t zero_bytes,
                                                 bool writable);
 
-struct supp_page_table_entry *add_to_supp_page_table(struct frame_table_entry *fte, void *upage, bool writable);
+struct supp_page_table_entry *add_to_supp_page_table(struct list *spt, struct frame_table_entry *fte, void *upage, bool writable);
 
-struct supp_page_table_entry *get_spte(void *upage);
+struct supp_page_table_entry *get_spte(struct list *spt, void *upage);
 
-struct supp_page_table_entry *get_spte_from_fte(struct frame_table_entry *fte);
+struct supp_page_table_entry *get_spte_from_fte(struct list *spt, struct frame_table_entry *fte);
 
-bool load_page_from_swap(struct supp_page_table_entry *spte);
+bool load_page_from_swap(struct list *spt, struct supp_page_table_entry *spte);
 
 void free_page(struct supp_page_table_entry *spte);

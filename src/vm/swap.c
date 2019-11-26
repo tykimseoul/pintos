@@ -13,7 +13,7 @@ void swap_init()
     lock_init(&swap_lock);
 }
 
-size_t swap_out_of_memory(void *upage)
+size_t swap_out_of_memory(void *kpage)
 {
     ASSERT(swap_block && swap_map);
     lock_acquire(&swap_lock);
@@ -22,13 +22,13 @@ size_t swap_out_of_memory(void *upage)
     ASSERT(bitmap_test(swap_map, swap_slot) == 1);
     for (size_t i = 0; i < SECTORS_PER_PAGE; i++)
     {
-        block_write(swap_block, swap_slot * SECTORS_PER_PAGE + i, (uint8_t *)upage + i * BLOCK_SECTOR_SIZE);
+        block_write(swap_block, swap_slot * SECTORS_PER_PAGE + i, (uint8_t *)kpage + i * BLOCK_SECTOR_SIZE);
     }
     lock_release(&swap_lock);
     return swap_slot;
 }
 
-void swap_into_memory(size_t idx, void *upage)
+void swap_into_memory(size_t idx, void *kpage)
 {
     ASSERT(swap_block && swap_map);
     lock_acquire(&swap_lock);
@@ -36,7 +36,7 @@ void swap_into_memory(size_t idx, void *upage)
     bitmap_reset(swap_map, idx);
     for (size_t i = 0; i < SECTORS_PER_PAGE; i++)
     {
-        block_read(swap_block, idx * SECTORS_PER_PAGE + i, (uint8_t *)upage + i * BLOCK_SECTOR_SIZE);
+        block_read(swap_block, idx * SECTORS_PER_PAGE + i, (uint8_t *)kpage + i * BLOCK_SECTOR_SIZE);
     }
     lock_release(&swap_lock);
 }
