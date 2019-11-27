@@ -15,6 +15,7 @@ void swap_init()
 
 size_t swap_out_of_memory(void *kpage)
 {
+    // printf("swapping out of memory\n");
     ASSERT(swap_block && swap_map);
     lock_acquire(&swap_lock);
     size_t swap_slot = bitmap_scan_and_flip(swap_map, 0, 1, false);
@@ -30,6 +31,7 @@ size_t swap_out_of_memory(void *kpage)
 
 void swap_into_memory(size_t idx, void *kpage)
 {
+    // printf("swapping into memory\n");
     ASSERT(swap_block && swap_map);
     lock_acquire(&swap_lock);
     ASSERT(bitmap_test(swap_map, idx) != 0);

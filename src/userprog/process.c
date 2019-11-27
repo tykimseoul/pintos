@@ -115,20 +115,21 @@ static void start_process(void *file_name_)
     char dest[FILE_NAME_SIZE];
     parse_filename(file_name, dest);
     success = load(dest, &if_.eip, &if_.esp);
+
+    thread_current()->load_success = success;
+    sema_up(&thread_current()->child_sema);
+
     if (success)
     {
-        thread_current()->load_success = true;
         populate_stack(file_name, &if_.esp);
+        /* If load failed, quit. */
+        palloc_free_page(file_name);
     }
 
-    /* If load failed, quit. */
-    palloc_free_page(file_name);
     if (!success)
     {
-        thread_current()->load_success = false;
         exit(-1);
     }
-    sema_up(&thread_current()->child_sema);
 
     /* Start the user process by simulating a return from an
        interrupt, implemented by intr_exit (in
@@ -556,14 +557,47 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 #ifdef VM
-        // Lazy load
-        struct thread *current_thread = thread_current();
-        ASSERT(pagedir_get_page(current_thread->pagedir, upage) == NULL); // no virtual page yet?
-
-        if (!make_spte_filesys(&current_thread->spt, upage, file, ofs, page_read_bytes, page_zero_bytes, writable))
+        bool lazy = true;
+        if (lazy)
         {
-            printf("failed to make a filesys spte\n");
-            return false;
+            // Lazy load
+            struct thread *current_thread = thread_current();
+            ASSERT(pagedir_get_page(current_thread->pagedir, upage) == NULL); // no virtual page yet?
+
+            if (!make_spte_filesys(&current_thread->spt, upage, file, ofs, page_read_bytes, page_zero_bytes, writable))
+            {
+                printf("failed to make a filesys spte\n");
+                return false;
+            }
+        }
+        else
+        {
+            // Active load
+            struct thread *current_thread = thread_current();
+            ASSERT(pagedir_get_page(current_thread->pagedir, upage) == NULL); // no virtual page yet?
+            void *frame = allocate_frame(upage, PAL_USER, writable);
+            struct supp_page_table_entry *victim_spte = make_spte(&current_thread->spt, frame, upage, writable);
+            if (!victim_spte)
+            {
+                printf("failed to make spte\n");
+                return false;
+            }
+
+            struct frame_table_entry *victim_fte = get_fte_by_spte(victim_spte);
+
+            //set the swap slot at index idx to be the data in the frame
+            // size_t idx = swap_out_of_memory(pagedir_get_page(current_thread->pagedir, get_spte_from_frame(victim_fte)->user_vaddr));
+            size_t idx = swap_out_of_memory(victim_fte->frame);
+            printf("successfully swapped out of memory to index: %d\n", idx);
+            victim_spte->swap_slot = idx;
+
+            // printf("setting page status: in swap\n");
+            victim_spte->status = IN_SWAP;
+            free_frame(victim_fte->frame);
+            victim_spte->fte = NULL;
+            printf("user_vaddr: %p\n", victim_spte->user_vaddr);
+
+            printf("eviction success\n\n");
         }
 #else
         /* Get a page of memory. */
@@ -610,16 +644,21 @@ static bool setup_stack(void **esp)
 #else
     kpage = palloc_get_page(PAL_USER | PAL_ZERO);
 #endif
+    if (kpage == 0 || kpage == NULL)
+    {
+        PANIC("WTF is this\n");
+    }
     struct supp_page_table_entry *spte = make_spte(&thread_current()->spt, kpage, PHYS_BASE - PGSIZE, true);
     if (spte)
     {
-        // printf("SUCCESS making spte at %p in setup_stack\n", spte);
+        // printf("SUCCESS making spte at %p allocated frame at: %p in setup_stack\n", spte, kpage);
         *esp = PHYS_BASE;
         success = true;
     }
     else
     {
 #ifdef VM
+        printf("failed to allocate frame in setup stack\n");
         free_frame(kpage);
 #else
         palloc_free_page(kpage);
@@ -643,5 +682,10 @@ bool install_page(void *upage, void *kpage, bool writable)
 
     /* Verify that there's not already a page at that virtual
        address, then map our page there. */
-    return (pagedir_get_page(t->pagedir, upage) == NULL && pagedir_set_page(t->pagedir, upage, kpage, writable));
+    bool success = (pagedir_get_page(t->pagedir, upage) == NULL && pagedir_set_page(t->pagedir, upage, kpage, writable));
+    // if (success)
+    //     printf("installating kpage: %p at upage: %p in pagedir: %p success\n", kpage, upage, t->pagedir);
+    // else
+    //     printf("installating kpage: %p at upage: %p in pagedir: %p failed\n", kpage, upage, t->pagedir);
+    return success;
 }

@@ -20,36 +20,33 @@ struct frame_table_entry *get_fte_by_spte(struct supp_page_table_entry *spte);
 void *allocate_frame(void *upage, enum palloc_flags flags, bool writable)
 {
     lock_acquire(&frame_lock);
-    printf("ALLOCATE FRAME------------- at %p\n", upage);
-    if (upage < 4096)
-    {
-        PANIC("YO WTF\n");
-    }
+    // printf("ALLOCATE FRAME------------- at %p\n", upage);
     void *frame = (void *)palloc_get_page(flags);
+    // printf(">>>>>>>>>>>>PALLOC HERE at kpage: %p<<<<<<<<<<<<<<\n", frame);
 
     //null is different from 0
     if (!frame || frame == 0)
     {
         //evict
-        printf("no frame, trying to evict...\n");
+        // printf("no frame, trying to evict...\n");
         bool eviction_success = evict_frame();
         lock_acquire(&frame_lock);
         if (eviction_success)
         {
-            if (upage < 4096)
-            {
-                PANIC("YO WTF\n");
-            }
+            // printf("evict success... getting new frame\n");
             frame = (void *)palloc_get_page(flags);
+            // printf("got new frame: %p!\n", frame);
+            ASSERT(frame != NULL && frame != 0);
         }
         else
         {
             PANIC("Evict failed.T-T");
         }
     }
-    printf("got frame, adding to frame table...\n");
+    // printf("got frame, adding to frame table...\n");
     if (!frame || frame == 0)
     {
+        printf("hi\n");
         PANIC("cannot allocate frame\n");
     }
     struct frame_table_entry *fte = add_to_frame_table(frame);
@@ -61,8 +58,9 @@ void *allocate_frame(void *upage, enum palloc_flags flags, bool writable)
         lock_release(&frame_lock);
         return NULL;
     }
-    printf("allocate frame: %p success\n\n", frame);
-    lock_release(&frame_lock);
+    // printf("allocate frame: %p success\n\n", frame);
+    if (lock_held_by_current_thread(&frame_lock))
+        lock_release(&frame_lock);
     return frame;
 }
 
@@ -78,7 +76,7 @@ struct frame_table_entry *add_to_frame_table(void *frame)
     }
     if (frame == 0 || frame == NULL)
     {
-        PANIC("yo i got no frame\n");
+        PANIC("cannot add null frame to frame table\n");
     }
     fte->frame = frame;
     fte->owner = thread_current();
@@ -115,8 +113,31 @@ struct frame_table_entry *get_fte_by_spte(struct supp_page_table_entry *spte)
     return NULL;
 }
 
+bool evict_frame()
+{
+    // printf("\nEVICTING--------------------------------\n");
+    struct frame_table_entry *victim_fte = get_frame_victim();
+    // printf("got frame victim: %p\n", victim_fte->frame);
+    struct supp_page_table_entry *victim_spte = get_spte_from_fte(&victim_fte->owner->spt, victim_fte);
+    ASSERT(victim_spte);
+
+    //set the swap slot at index idx to be the data in the frame
+    size_t idx = swap_out_of_memory(victim_fte->frame);
+    // printf("successfully swapped out of memory at index: %d\n", idx);
+
+    victim_spte->status = IN_SWAP;
+    victim_spte->swap_slot = idx;
+    free_frame(victim_fte->frame);
+    victim_spte->fte = NULL;
+    // printf("setting page status: in swap\n");
+
+    // printf("eviction success\n\n");
+    return true;
+}
+
 void free_frame(void *kpage)
 {
+    // printf("FREEING FRAME>>>>>>>>>>\n");
     ASSERT(is_kernel_vaddr(kpage));
     ASSERT(pg_ofs(kpage) == 0);
 
@@ -128,37 +149,23 @@ void free_frame(void *kpage)
     if (fte->frame)
     {
         list_remove(&fte->frame_elem);
+        struct supp_page_table_entry *spte = get_spte_from_fte(&fte->owner->spt, fte);
+        uint32_t *pd = fte->owner->pagedir;
+        void *uaddr = spte->user_vaddr;
         palloc_free_page(kpage);
+        pagedir_clear_page(pd, uaddr);
+        // printf("after freeing frame, uaddr: %p, %p\n", spte, spte->user_vaddr);
         free(fte);
     }
     lock_release(&frame_lock);
 }
 
-bool evict_frame()
-{
-    printf("\nEVICTING----------------------\n");
-    struct frame_table_entry *victim_fte = get_frame_victim();
-    printf("got frame victim: %p\n", victim_fte->frame);
-    struct supp_page_table_entry *victim_spte = get_spte_from_fte(&thread_current()->spt, victim_fte);
-    ASSERT(victim_spte);
-
-    //set the swap slot at index idx to be the data in the frame
-    size_t idx = swap_out_of_memory(victim_fte->frame);
-    printf("successfully swapped out of memory at index: %d\n", idx);
-
-    free_frame(victim_fte->frame);
-
-    victim_spte->fte = NULL;
-    printf("setting page status: in swap\n");
-    victim_spte->status = IN_SWAP;
-    victim_spte->swap_slot = idx;
-
-    printf("eviction success\n\n");
-    return true;
-}
-
 struct frame_table_entry *get_frame_victim()
 {
     struct frame_table_entry *victim = list_entry(list_front(&frame_table), struct frame_table_entry, frame_elem);
+    if (!victim)
+    {
+        PANIC("really?\n");
+    }
     return victim;
 }

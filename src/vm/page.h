@@ -9,7 +9,7 @@
 #include "../filesys/off_t.h"
 #include "../filesys/file.h"
 
-static struct lock page_lock;
+// static struct lock page_lock;
 
 enum page_status
 {

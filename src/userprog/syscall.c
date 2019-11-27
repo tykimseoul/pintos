@@ -240,12 +240,12 @@ int open(const char *file)
         return -1;
     }
 
-    printf("file is: %s\n", file);
+    // printf("file is: %s\n", file);
     struct file *opened_file = filesys_open(file);
     struct thread *t = thread_current();
     int fd;
 
-    printf("opened file: %p\n", opened_file);
+    // printf("opened file: %p\n", opened_file);
     check_file_validity(opened_file);
 
     for (fd = 2; fd < FILE_MAX_COUNT; fd++)
@@ -290,7 +290,7 @@ int read(int fd, void *buffer, unsigned size)
         return 0;
     }
     can_i_read(buffer, size);
-    printf("yes i can\n\n");
+    // printf("yes i can\n\n");
     struct file *file;
     struct thread *t = thread_current();
     unsigned read_cnt = 0;
@@ -304,7 +304,7 @@ int read(int fd, void *buffer, unsigned size)
         }
         return read_cnt;
     }
-    printf("reading from thread: %p\n", t);
+    // printf("reading from thread: %p\n", t);
     // get file from fd
     file = t->files[fd];
 
@@ -313,7 +313,7 @@ int read(int fd, void *buffer, unsigned size)
         // lock_release(&file_lock);
         return 0;
     }
-    printf("in read4\n\n");
+    // printf("in read4\n\n");
     read_cnt = file_read(file, buffer, size);
     // lock_release(&file_lock);
     return (int)read_cnt;
@@ -434,7 +434,7 @@ int write(int fd, const void *buffer, unsigned size)
     {
         struct file *writing_file = thread_current()->files[fd];
         check_file_validity(writing_file);
-        printf("writing to file: %p\n\n", writing_file);
+        // printf("writing to file: %p\n\n", writing_file);
         return file_write(writing_file, buffer, size);
     }
 }

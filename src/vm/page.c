@@ -9,19 +9,12 @@
 
 void init_page_sys()
 {
-    lock_init(&page_lock);
+    // lock_init(&page_lock);
 }
-
-// struct list *create_supp_page_table()
-// {
-//     struct list *spt;
-//     list_init(&spt);
-//     return spt;
-// }
 
 struct supp_page_table_entry *make_spte(struct list *spt, void *frame, void *upage, bool writable)
 {
-    // printf("MAKING NEW SPTE-------------\n");
+    // printf("MAKING NEW SPTE------------- (at upage: %p)\n", upage);
     ASSERT(frame != 0);
     struct frame_table_entry *fte = get_fte_by_frame(frame);
     ASSERT(fte);
@@ -60,16 +53,11 @@ struct supp_page_table_entry *make_spte_filesys(struct list *spt, void *upage, s
                                                 off_t offset, uint32_t read_bytes, uint32_t zero_bytes,
                                                 bool writable)
 {
-    printf("MAKING NEW SPTE FILESYS-------------\n");
+    // printf("MAKING NEW SPTE FILESYS-------------\n");
 
     void *user_vaddr = pg_round_down(upage);
 
-    // if (get_spte(spt, user_vaddr))
-    // {
-    // }
-    lock_acquire(&page_lock);
     struct supp_page_table_entry *spte = malloc(sizeof(struct supp_page_table_entry));
-    lock_release(&page_lock);
     if (!spte)
     {
         printf("making spte(filesys) failed\n");
@@ -79,7 +67,10 @@ struct supp_page_table_entry *make_spte_filesys(struct list *spt, void *upage, s
     }
 
     spte->user_vaddr = user_vaddr;
-    printf("making spte(filesys) with uvaddr: %p\n", spte->user_vaddr);
+    ASSERT(spte->user_vaddr != 0 && spte->user_vaddr != NULL);
+    // printf("making spte(filesys) with uvaddr: %p\n", spte->user_vaddr);
+    // printf("creating spte at virtual address: %p\n\n", spte->user_vaddr);
+
     // printf("setting page status: fsys\n");
     spte->status = FSYS;
 
@@ -99,11 +90,9 @@ struct supp_page_table_entry *make_spte_filesys(struct list *spt, void *upage, s
     // printf("read: %d\n", spte->read_bytes);
     // printf("zero: %d\n\n", spte->zero_bytes);
 
-    lock_acquire(&page_lock);
     // printf("inserting spte: %p\n      into spt: %p [%d]\n\n", spte, spt, list_size(spt));
     list_push_back(spt, &spte->page_elem);
     // printf("inserting spte: %p\n      into spt: %p [%d]\n\n", spte, spt, list_size(spt));
-    lock_release(&page_lock);
 
     if (!spte)
     {
@@ -135,11 +124,14 @@ struct supp_page_table_entry *add_to_supp_page_table(struct list *spt, struct fr
     struct supp_page_table_entry *spte = malloc(sizeof(struct supp_page_table_entry));
     if (!spte)
     {
+        printf("not enough memory to make spte\n");
         free(spte);
         return NULL;
     }
     spte->owner = thread_current();
     spte->user_vaddr = pg_round_down(upage);
+    ASSERT(spte->user_vaddr != 0 && spte->user_vaddr != NULL);
+    // printf("creating spte at virtual address: %p\n\n", spte->user_vaddr);
     // printf("setting page status: in frame (in add to spte)\n");
     // printf("putting in frame: %p\n         in spte: %p\n", fte->frame, spte);
     spte->status = IN_FRAME;
@@ -147,11 +139,9 @@ struct supp_page_table_entry *add_to_supp_page_table(struct list *spt, struct fr
     spte->fte = fte;
     spte->dirty = false;
 
-    lock_acquire(&page_lock);
     // printf("inserting spte: %p\n      into spt: %p [%d]\n\n", spte, spt, list_size(spt));
     list_push_back(spt, &spte->page_elem);
     // printf("inserting spte: %p\n      into spt: %p [%d]\n\n", spte, spt, list_size(spt));
-    lock_release(&page_lock);
     return spte;
 }
 
@@ -174,15 +164,18 @@ struct supp_page_table_entry *get_spte_from_fte(struct list *spt, struct frame_t
 bool load_page_from_swap(struct list *spt, struct supp_page_table_entry *spte)
 {
     ASSERT(spte->status == IN_SWAP);
-    printf("LOADING FROM SWAP------------\n");
+    // printf("LOADING FROM SWAP------------\n");
     void *new_frame = allocate_frame(spte->user_vaddr, PAL_USER, spte->writable);
     if (!new_frame)
     {
+        // printf("give me a frame bitch\n");
         return false;
     }
-    swap_into_memory(spte->swap_slot, spte->fte->frame);
+    // printf("trying swap\n");
+    swap_into_memory(spte->swap_slot, new_frame);
+    // printf("swap SUCCESS\n");
 
-    printf("installing page\n");
+    // printf("installing page\n");
     bool installed = install_page(spte->user_vaddr, new_frame, spte->writable);
     if (!installed)
     {
@@ -194,8 +187,8 @@ bool load_page_from_swap(struct list *spt, struct supp_page_table_entry *spte)
         return NULL;
     }
 
-    printf("setting page status: in frame (in load from swap)\n");
-    printf("putting in frame: %p\n         in spte: %p\n", new_frame, spte);
+    // printf("setting page status: in frame (in load from swap)\n");
+    // printf("putting in frame: %p\n         in spte: %p\n", new_frame, spte);
     spte->status = IN_FRAME;
     spte->fte = get_fte_by_frame(new_frame);
     spte->swap_slot = -1;
@@ -205,14 +198,14 @@ bool load_page_from_swap(struct list *spt, struct supp_page_table_entry *spte)
 
 void free_page(struct supp_page_table_entry *spte)
 {
-    if (!lock_held_by_current_thread(&page_lock))
-    {
-        lock_acquire(&page_lock);
-    }
+    // printf("FREEING PAGE>>>>>>>>\n");
     list_remove(&spte->page_elem);
-    uint8_t *kpage = pagedir_get_page(thread_current()->pagedir, spte->user_vaddr);
-    pagedir_clear_page(thread_current()->pagedir, spte->user_vaddr);
+    uint8_t *kpage = pagedir_get_page(spte->owner->pagedir, spte->user_vaddr);
+    uint32_t *pd = spte->owner->pagedir;
+    void *uaddr = spte->user_vaddr;
     free_frame(spte->fte->frame);
     free(spte);
-    lock_release(&page_lock);
+    // printf("print1\n");
+    pagedir_clear_page(pd, uaddr);
+    // printf("print2\n");
 }
