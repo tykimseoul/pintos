@@ -19,6 +19,7 @@ static void can_i_read(void *uaddr, unsigned size);
 static void can_i_write(void *uaddr, unsigned size);
 
 struct lock file_lock;
+#define DBG true
 
 // static int get_user(const uint8_t *uaddr);
 
@@ -91,7 +92,7 @@ static void syscall_handler(struct intr_frame *f UNUSED)
         const char *file = (const char *)*((int *)f->esp + 1);
 
         lock_acquire(&file_lock);
-        // printf("opening file...\n");
+        if(DBG) printf("opening file...\n");
         f->eax = open(file);
         lock_release(&file_lock);
         break;
@@ -117,7 +118,7 @@ static void syscall_handler(struct intr_frame *f UNUSED)
         unsigned size = *((unsigned *)f->esp + 3);
 
         lock_acquire(&file_lock);
-        // printf("reading file...\n");
+        if(DBG) printf("reading file...\n");
         f->eax = read(fd, buffer, size);
         lock_release(&file_lock);
         break;
@@ -240,12 +241,12 @@ int open(const char *file)
         return -1;
     }
 
-    // printf("file is: %s\n", file);
+    if(DBG) printf("file is: %s\n", file);
     struct file *opened_file = filesys_open(file);
     struct thread *t = thread_current();
     int fd;
 
-    // printf("opened file: %p\n", opened_file);
+    if(DBG) printf("opened file: %p\n", opened_file);
     check_file_validity(opened_file);
 
     for (fd = 2; fd < FILE_MAX_COUNT; fd++)
@@ -265,7 +266,7 @@ int open(const char *file)
             file_deny_write(opened_file);
         }
         t->files[fd] = opened_file;
-        // printf("file %p set at thread: %p\n", opened_file, t);
+        if(DBG) printf("file %p set at thread: %p\n", opened_file, t);
         return fd;
     }
 }
@@ -290,7 +291,7 @@ int read(int fd, void *buffer, unsigned size)
         return 0;
     }
     can_i_read(buffer, size);
-    // printf("yes i can\n\n");
+    if(DBG) printf("yes i can\n\n");
     struct file *file;
     struct thread *t = thread_current();
     unsigned read_cnt = 0;
@@ -304,7 +305,7 @@ int read(int fd, void *buffer, unsigned size)
         }
         return read_cnt;
     }
-    // printf("reading from thread: %p\n", t);
+    if(DBG) printf("reading from thread: %p\n", t);
     // get file from fd
     file = t->files[fd];
 
@@ -313,7 +314,7 @@ int read(int fd, void *buffer, unsigned size)
         // lock_release(&file_lock);
         return 0;
     }
-    // printf("in read4\n\n");
+    if(DBG) printf("in read4\n\n");
     read_cnt = file_read(file, buffer, size);
     // lock_release(&file_lock);
     return (int)read_cnt;
@@ -341,7 +342,7 @@ int read(int fd, void *buffer, unsigned size)
             {
                 exit(-1);
             }
-            // printf("making a new frame in syscall...");
+            if(DBG) printf("making a new frame in syscall...");
             void *new_frame = allocate_frame(buffer_page, PAL_USER | PAL_ZERO, true);
             make_spte(&t->spt, new_frame, buffer_page, true);
             count++;
@@ -358,7 +359,7 @@ int read(int fd, void *buffer, unsigned size)
         // {
         //     if (!put_user(*((uint8_t *)(buffer + count)), input_getc()))
         //     {
-        //         // printf("in read5\n");
+        //         if(DBG) printf("in read5\n");
         //         if (lock_held_by_current_thread(&file_lock))
         //             lock_release(&file_lock);
         //         exit(-1);
@@ -434,7 +435,7 @@ int write(int fd, const void *buffer, unsigned size)
     {
         struct file *writing_file = thread_current()->files[fd];
         check_file_validity(writing_file);
-        // printf("writing to file: %p\n\n", writing_file);
+        if(DBG) printf("writing to file: %p\n\n", writing_file);
         return file_write(writing_file, buffer, size);
     }
 }
