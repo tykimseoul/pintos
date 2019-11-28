@@ -12,6 +12,8 @@
 
 #define MAX_STACK_SIZE (1 << 23)
 
+#define DBG true
+
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
@@ -34,8 +36,7 @@ static void page_fault(struct intr_frame *);
 
    Refer to [IA32-v3a] section 5.15 "Exception and Interrupt
    Reference" for a description of each of these exceptions. */
-void exception_init(void)
-{
+void exception_init(void) {
     /* These exceptions can be raised explicitly by a user program,
        e.g. via the INT, INT3, INTO, and BOUND instructions.  Thus,
        we set DPL==3, meaning that user programs are allowed to
@@ -68,14 +69,12 @@ void exception_init(void)
 }
 
 /* Prints exception statistics. */
-void exception_print_stats(void)
-{
+void exception_print_stats(void) {
     printf("Exception: %lld page faults\n", page_fault_cnt);
 }
 
 /* Handler for an exception (probably) caused by a user process. */
-static void kill(struct intr_frame *f)
-{
+static void kill(struct intr_frame *f) {
     /* This interrupt is one (probably) caused by a user process.
        For example, the process might have tried to access unmapped
        virtual memory (a page fault).  For now, we simply kill the
@@ -86,30 +85,29 @@ static void kill(struct intr_frame *f)
 
     /* The interrupt frame's code segment value tells us where the
        exception originated. */
-    switch (f->cs)
-    {
-    case SEL_UCSEG:
-        /* User's code segment, so it's a user exception, as we
-               expected.  Kill the user process.  */
-        printf("%s: dying due to interrupt %#04x (%s).\n",
-               thread_name(), f->vec_no, intr_name(f->vec_no));
-        intr_dump_frame(f);
-        thread_exit();
+    switch (f->cs) {
+        case SEL_UCSEG:
+            /* User's code segment, so it's a user exception, as we
+                   expected.  Kill the user process.  */
+            printf("%s: dying due to interrupt %#04x (%s).\n",
+                   thread_name(), f->vec_no, intr_name(f->vec_no));
+            intr_dump_frame(f);
+            thread_exit();
 
-    case SEL_KCSEG:
-        /* Kernel's code segment, which indicates a kernel bug.
-               Kernel code shouldn't throw exceptions.  (Page faults
-               may cause kernel exceptions--but they shouldn't arrive
-               here.)  Panic the kernel to make the point.  */
-        intr_dump_frame(f);
-        PANIC("Kernel bug - unexpected interrupt in kernel");
+        case SEL_KCSEG:
+            /* Kernel's code segment, which indicates a kernel bug.
+                   Kernel code shouldn't throw exceptions.  (Page faults
+                   may cause kernel exceptions--but they shouldn't arrive
+                   here.)  Panic the kernel to make the point.  */
+            intr_dump_frame(f);
+            PANIC("Kernel bug - unexpected interrupt in kernel");
 
-    default:
-        /* Some other code segment?  Shouldn't happen.  Panic the
-               kernel. */
-        printf("Interrupt %#04x (%s) in unknown segment %04x\n",
-               f->vec_no, intr_name(f->vec_no), f->cs);
-        thread_exit();
+        default:
+            /* Some other code segment?  Shouldn't happen.  Panic the
+                   kernel. */
+            printf("Interrupt %#04x (%s) in unknown segment %04x\n",
+                   f->vec_no, intr_name(f->vec_no), f->cs);
+            thread_exit();
     }
 }
 
@@ -124,8 +122,7 @@ static void kill(struct intr_frame *f)
    can find more information about both of these in the
    description of "Interrupt 14--Page Fault Exception (#PF)" in
    [IA32-v3a] section 5.15 "Exception and Interrupt Reference". */
-static void page_fault(struct intr_frame *f)
-{
+static void page_fault(struct intr_frame *f) {
     bool not_present; /* True: not-present page, false: writing r/o page. */
     bool write;       /* True: access was write, false: access was read. */
     bool user;        /* True: access by user, false: access by kernel. */
@@ -162,117 +159,104 @@ static void page_fault(struct intr_frame *f)
     // section 4.3.3
     struct supp_page_table_entry *spte = get_spte(&current_thread->spt, upage);
 
-    // printf("\nPage fault at %p: %s error %s page in %s context.\n",
-    //        fault_addr,
-    //        not_present ? "not present" : "rights violation",
-    //        write ? "writing" : "reading",
-    //        user ? "user" : "kernel");
-    // printf("\nfault at upage: %p\n", upage);
+    if (DBG)
+        printf("\nPage fault at %p: %s error %s page in %s context.\n",
+               fault_addr,
+               not_present ? "not present" : "rights violation",
+               write ? "writing" : "reading",
+               user ? "user" : "kernel");
+    if (DBG) printf("\nfault at upage: %p\n", upage);
 
-    if (!not_present)
-    {
-        // printf("goto invalid access\n");
+    if (!not_present) {
+        if (DBG) printf("goto invalid access\n");
         goto INVALID_ACCESS;
     }
 
-    if (spte == NULL)
-    {
+    if (spte == NULL) {
         //stack growth
         void *esp = user ? f->esp : current_thread->esp;
         in_stack = PHYS_BASE - MAX_STACK_SIZE < fault_addr && fault_addr <= PHYS_BASE;
         contiguous = fault_addr == esp - 4 || fault_addr == esp - 32 || fault_addr >= esp;
-        if (contiguous && in_stack)
-        {
+        if (contiguous && in_stack) {
             //grow the stack
-            // printf("growing stack...\n");
+            if (DBG) printf("growing stack...\n");
             void *frame = allocate_frame(upage, PAL_USER | PAL_ZERO, true);
             struct supp_page_table_entry *spte = make_spte(&current_thread->spt, frame, upage, true);
-            if (spte)
-            {
-                // printf("stack growth success\n");
+            if (spte) {
+                if (DBG) printf("stack growth success\n");
                 return;
             }
         }
         //ungrowable region
-        // printf("ungrowable region\n");
+        if (DBG) printf("ungrowable region\n");
         exit(-1);
     }
 
-    if (spte->status == IN_SWAP)
-    {
-        // printf("loading from swap... upage: %p\n", upage);
+    if (spte->status == IN_SWAP) {
+        if (DBG) printf("loading from swap... upage: %p\n", upage);
         if (load_page_from_swap(&current_thread->spt, spte))
             return;
     }
 
-    if (spte->status == FSYS)
-    {
+    if (spte->status == FSYS) {
         //the data required is in the filesys and is being accessed for the first time. Load it.
-        // printf("loading from filesys... upage: %p\n", upage);
+        if (DBG) printf("loading from filesys... upage: %p\n", upage);
         void *frame = allocate_frame(upage, PAL_USER | PAL_ZERO, spte->writable);
-        // printf("frame allocated: %p\n", frame);
-        if (!frame || frame == 0)
-        {
-            printf("allocation failed\n");
+        if (DBG) printf("frame allocated: %p\n", frame);
+        if (!frame || frame == 0) {
+            if (DBG) printf("allocation failed\n");
             exit(-1);
         }
 
         file_seek(spte->file, spte->ofs);
-        if (file_read(spte->file, frame, spte->read_bytes) != (off_t)spte->read_bytes)
-        {
-            printf("failed to read file\n");
+        if (file_read(spte->file, frame, spte->read_bytes) != (off_t) spte->read_bytes) {
+            if (DBG) printf("failed to read file\n");
             free_frame(frame);
             exit(-1);
         }
         memset(frame + spte->read_bytes, 0, spte->zero_bytes);
 
-        // printf("installing page\n");
+        if (DBG) printf("installing page\n");
         bool installed = install_page(upage, frame, spte->writable);
         // bool installed = pagedir_get_page(current_thread->pagedir, upage) == NULL && pagedir_set_page(current_thread->pagedir, upage, frame, spte->writable);
-        if (!installed)
-        {
-            printf("install failed\n");
+        if (!installed) {
+            if (DBG) printf("install failed\n");
             free_page(spte);
             exit(-1);
         }
 
         spte->fte = get_fte_by_frame(frame);
-        // printf("putting in frame: %p in  spte: %p with uvaddr: %p\n", spte->fte->frame, spte, spte->user_vaddr);
+        if (DBG) printf("putting in frame: %p in  spte: %p with uvaddr: %p\n", spte->fte->frame, spte, spte->user_vaddr);
 
         spte->status = IN_FRAME;
-        // printf("setting page status: in frame %d (in exception)\n", spte->status);
+        if (DBG) printf("setting page status: in frame %d (in exception)\n", spte->status);
         spte->dirty = false;
         return;
     }
 
-    if (spte->status == IN_FRAME)
-    {
-        printf("page fault at upage: %p\n", upage);
-        printf("page fault occured but the page is in frame...\n");
-        printf("this spte has frame: %p in spte: %p with uvaddr: %p\n", spte->fte->frame, spte, spte->user_vaddr);
+    if (spte->status == IN_FRAME) {
+        if (DBG) printf("page fault at upage: %p\n", upage);
+        if (DBG) printf("page fault occured but the page is in frame...\n");
+        if (DBG) printf("this spte has frame: %p in spte: %p with uvaddr: %p\n", spte->fte->frame, spte, spte->user_vaddr);
     }
-    if (spte->status == ALLZERO)
-    {
-        printf("we never even use allzero wtf\n");
+    if (spte->status == ALLZERO) {
+        if (DBG) printf("we never even use allzero wtf\n");
     }
 
-INVALID_ACCESS:
-    if (user)
-    {
-        // printf("invalid access\n");
+    INVALID_ACCESS:
+    if (user) {
+        if (DBG) printf("invalid access\n");
         exit(-1);
-    }
-    else
-    {
-        // printf("some kernel thing\n");
+    } else {
+        if (DBG) printf("some kernel thing\n");
         (f->eax) = -1;
         return;
     }
 
-    printf("Page fault at %p: %s error %s page in %s context.\n",
-           fault_addr,
-           not_present ? "not present" : "rights violation",
-           write ? "writing" : "reading",
-           user ? "user" : "kernel");
+//    printf("Page fault at %p: %s error %s page in %s context.\n",
+//           fault_addr,
+//           not_present ? "not present" : "rights violation",
+//           write ? "writing" : "reading",
+//           user ? "user" : "kernel");
     kill(f);
 }
