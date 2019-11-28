@@ -46,3 +46,11 @@ void swap_into_memory(size_t idx, void *kpage)
     }
     lock_release(&swap_lock);
 }
+
+void free_swap(size_t idx){
+    ASSERT(swap_block && swap_map);
+    lock_acquire(&swap_lock);
+    ASSERT(bitmap_test(swap_map, idx) != 0);
+    bitmap_reset(swap_map, idx);
+    lock_release(&swap_lock);
+}

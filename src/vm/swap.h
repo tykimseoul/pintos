@@ -20,3 +20,5 @@ size_t swap_out_of_memory(void *upage);
 
 void swap_into_memory(size_t idx, void *upage);
 
+void free_swap(size_t idx);
+

@@ -228,9 +228,5 @@ void free_page(struct supp_page_table_entry *spte)
     free_frame(spte->fte->frame);
     lock_release(&frame_free_lock);
     free(spte);
-    if (DBG)
-        printf("print1\n");
     pagedir_clear_page(pd, uaddr);
-    if (DBG)
-        printf("print2\n");
 }

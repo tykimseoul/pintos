@@ -113,6 +113,7 @@ struct thread
 
     struct list spt; /*supplementary page table of this thread*/
     void *esp;                  /* esp of this thread */
+    struct list mmap_table;             //mmap table
 
     /* Owned by thread.c. */
     unsigned magic; /* Detects stack overflow. */

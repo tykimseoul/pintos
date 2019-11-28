@@ -191,6 +191,7 @@ tid_t thread_create(const char *name, int priority,
     tid = t->tid = allocate_tid();
 
     list_init(&t->spt);
+    list_init(&t->mmap_table);
 
     /* Stack frame for kernel_thread(). */
     kf = alloc_frame(t, sizeof *kf);
