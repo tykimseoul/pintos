@@ -25,7 +25,7 @@
 
 #define FILE_NAME_SIZE 256
 
-#define DBG true
+#define DBG false
 
 static thread_func start_process
     NO_RETURN;
@@ -241,18 +241,24 @@ void process_exit(void)
 {
     struct thread *cur = thread_current();
     uint32_t *pd;
+    if (cur->exec_file)
+    {
+        file_allow_write(cur->exec_file);
+        file_close(cur->exec_file);
+    }
 
     sema_up(&cur->child_sema);
     sema_down(&cur->exit_sema);
     /* Destroy the current process's page directory and switch back
        to the kernel-only page directory. */
 
-    if (cur->exec_file)
+    for (int i = 2; i < FILE_MAX_COUNT; i++)
     {
-        file_allow_write(cur->exec_file);
-        file_close(cur->exec_file);
+        if (cur->files[i] != NULL)
+        {
+            close(i);
+        }
     }
-    // close_all_files(cur);
 
     pd = cur->pagedir;
     if (pd != NULL)
@@ -568,7 +574,8 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
 
             if (!make_spte_filesys(&current_thread->spt, upage, file, ofs, page_read_bytes, page_zero_bytes, writable))
             {
-                if(DBG) printf("failed to make a filesys spte\n");
+                if (DBG)
+                    printf("failed to make a filesys spte\n");
                 return false;
             }
         }
@@ -581,7 +588,8 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
             struct supp_page_table_entry *victim_spte = make_spte(&current_thread->spt, frame, upage, writable);
             if (!victim_spte)
             {
-                if(DBG) printf("failed to make spte\n");
+                if (DBG)
+                    printf("failed to make spte\n");
                 return false;
             }
 
@@ -590,16 +598,21 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
             //set the swap slot at index idx to be the data in the frame
             // size_t idx = swap_out_of_memory(pagedir_get_page(current_thread->pagedir, get_spte_from_frame(victim_fte)->user_vaddr));
             size_t idx = swap_out_of_memory(victim_fte->frame);
-            if(DBG) printf("successfully swapped out of memory to index: %d\n", idx);
+            if (DBG)
+                printf("successfully swapped out of memory to index: %d\n", idx);
             victim_spte->swap_slot = idx;
 
             // if(DBG) printf("setting page status: in swap\n");
             victim_spte->status = IN_SWAP;
+            lock_acquire(&frame_free_lock);
             free_frame(victim_fte->frame);
+            lock_release(&frame_free_lock);
             victim_spte->fte = NULL;
-            if(DBG) printf("user_vaddr: %p\n", victim_spte->user_vaddr);
+            if (DBG)
+                printf("user_vaddr: %p\n", victim_spte->user_vaddr);
 
-            if(DBG) printf("eviction success\n\n");
+            if (DBG)
+                printf("eviction success\n\n");
         }
 #else
         /* Get a page of memory. */
@@ -640,7 +653,8 @@ static bool setup_stack(void **esp)
     uint8_t *kpage;
     bool success = false;
 
- if(DBG) printf("making a page in setup stack...\n");
+    if (DBG)
+        printf("making a page in setup stack...\n");
 #ifdef VM
     kpage = allocate_frame(PHYS_BASE - PGSIZE, PAL_USER | PAL_ZERO, true);
 #else
@@ -653,15 +667,19 @@ static bool setup_stack(void **esp)
     struct supp_page_table_entry *spte = make_spte(&thread_current()->spt, kpage, PHYS_BASE - PGSIZE, true);
     if (spte)
     {
-         if(DBG) printf("SUCCESS making spte at %p allocated frame at: %p in setup_stack\n", spte, kpage);
+        if (DBG)
+            printf("SUCCESS making spte at %p allocated frame at: %p in setup_stack\n", spte, kpage);
         *esp = PHYS_BASE;
         success = true;
     }
     else
     {
 #ifdef VM
-        if(DBG) printf("failed to allocate frame in setup stack\n");
+        if (DBG)
+            printf("failed to allocate frame in setup stack\n");
+        lock_acquire(&frame_free_lock);
         free_frame(kpage);
+        lock_release(&frame_free_lock);
 #else
         palloc_free_page(kpage);
 #endif

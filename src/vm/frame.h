@@ -7,7 +7,8 @@
 #include "../threads/palloc.h"
 
 static struct list frame_table;
-struct lock frame_lock;
+struct lock frame_alloc_lock;
+struct lock frame_free_lock;
 
 struct frame_table_entry
 {
