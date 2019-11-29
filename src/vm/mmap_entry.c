@@ -24,12 +24,13 @@ static void unmap(struct thread *t, void *page, struct file *f, int ofs, size_t 
     struct supp_page_table_entry *spte = get_spte(spt, page);
     if (!spte) {
         PANIC("unmap failed\n");
+        return;
     }
 
     switch (spte->status) {
         case IN_FRAME: {
             ASSERT(spte->fte->frame != NULL);
-            bool dirty = spte->dirty || pagedir_is_dirty(pagedir, spte->user_vaddr) || pagedir_is_dirty(pagedir, spte->fte->frame);
+            bool dirty = pagedir_is_dirty(pagedir, spte->user_vaddr);
             if (dirty) {
                 file_write_at(f, spte->user_vaddr, bytes, ofs);
             }
@@ -39,7 +40,7 @@ static void unmap(struct thread *t, void *page, struct file *f, int ofs, size_t 
             break;
         }
         case IN_SWAP: {
-            bool dirty = spte->dirty || pagedir_is_dirty(pagedir, spte->user_vaddr);
+            bool dirty = pagedir_is_dirty(pagedir, spte->user_vaddr);
             if (dirty) {
                 void *tmp = palloc_get_page(0);
                 swap_into_memory(spte->swap_slot, tmp);

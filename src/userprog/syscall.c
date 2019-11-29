@@ -384,7 +384,7 @@ static void can_i_write(void *uaddr, unsigned size) {
             exit(-1);
         }
         struct supp_page_table_entry *spte = get_spte(&thread_current()->spt, ptr);
-        if (!spte || spte->writable == false) {
+        if (!spte) {
             exit(-1);
         }
     }
