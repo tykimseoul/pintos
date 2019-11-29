@@ -284,7 +284,11 @@ mapid_t mmap(int fd, void *addr) {
     }
     lock_acquire(&file_lock);
     struct thread *current_thread = thread_current();
-    struct file *f = current_thread->files[fd];
+    struct file *f = NULL;
+    struct file *target = current_thread->files[fd];
+    if(target){
+        f = file_reopen(target);
+    }
     if (f == NULL) {
         goto MMAP_FAIL;
     }
