@@ -247,8 +247,6 @@ void process_exit(void)
         file_close(cur->exec_file);
     }
 
-    sema_up(&cur->child_sema);
-    sema_down(&cur->exit_sema);
     /* Destroy the current process's page directory and switch back
        to the kernel-only page directory. */
 
@@ -261,40 +259,48 @@ void process_exit(void)
     }
 
 #ifdef VM
-    struct list *mmap_table=&cur->mmap_table;
-    while(!list_empty(mmap_table)){
+    struct list *mmap_table = &cur->mmap_table;
+    while (!list_empty(mmap_table))
+    {
         struct list_elem *e = list_begin(mmap_table);
         struct mmap_entry *mme = list_entry(e, struct mmap_entry, mmap_elem);
 
         munmap(mme->id);
     }
 
-    struct list *spt=&cur->spt;
-    while(!list_empty(spt)){
+    struct list *spt = &cur->spt;
+    while (!list_empty(spt))
+    {
         struct list_elem *e = list_begin(spt);
         struct supp_page_table_entry *spte = list_entry(e, struct supp_page_table_entry, page_elem);
 
-        switch (spte->status){
-            case IN_FRAME:{
-                ASSERT(spte->fte->frame!=NULL);
-                lock_acquire(&frame_free_lock);
-                free_frame(spte->fte->frame);
-                lock_release(&frame_free_lock);
-                break;
-            }
-            case IN_SWAP:{
-                free_swap(spte->swap_slot);
-                break;
-            }
-            case FSYS:{
-                break;
-            }
+        switch (spte->status)
+        {
+        case IN_FRAME:
+        {
+            ASSERT(spte->fte->frame != NULL);
+            lock_acquire(&frame_free_lock);
+            free_frame(spte->fte->frame);
+            lock_release(&frame_free_lock);
+            break;
+        }
+        case IN_SWAP:
+        {
+            free_swap(spte->swap_slot);
+            break;
+        }
+        case FSYS:
+        {
+            break;
+        }
         }
 
         list_remove(&spte->page_elem);
         free(spte);
     }
 #endif
+    sema_up(&cur->child_sema);
+    sema_down(&cur->exit_sema);
 
     pd = cur->pagedir;
     if (pd != NULL)
