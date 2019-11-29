@@ -7,9 +7,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-typedef int mmapid_t;
+typedef int mapid_t;
+
 struct mmap_entry{
-    mmapid_t id;
+    mapid_t id;
     struct list_elem mmap_elem;
     struct file *file;
     void *upage;

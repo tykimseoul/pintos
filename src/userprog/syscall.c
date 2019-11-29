@@ -149,7 +149,7 @@ static void syscall_handler(struct intr_frame *f UNUSED) {
             break;
         }
         case SYS_MUNMAP: {
-            mmapid_t mapping = (mmapid_t) * ((int *) f->esp + 1);
+            mapid_t mapping = (mapid_t) *((int *) f->esp + 1);
             munmap(mapping);
             break;
         }
@@ -278,8 +278,8 @@ void close(int fd) {
     thread_current()->files[fd] = NULL;
 }
 
-mmapid_t mmap(int fd, void *addr) {
-    if (fd == 0 || fd == 1 || !is_user_vaddr(addr) || pg_ofs(addr) != 0) {
+mapid_t mmap(int fd, void *addr) {
+    if (fd == 0 || fd == 1 || !is_user_vaddr(addr) || pg_ofs(addr) != 0 || addr == NULL) {
         return -1;
     }
     lock_acquire(&file_lock);
@@ -302,10 +302,13 @@ mmapid_t mmap(int fd, void *addr) {
         size_t read_bytes = (ofs + PGSIZE < file_size ? PGSIZE : file_size - ofs);
         size_t zero_bytes = PGSIZE - read_bytes;
 
-        make_spte_filesys(&current_thread->spt, upage, f, ofs, read_bytes, zero_bytes, true);
+        struct supp_page_table_entry *spte = make_spte_filesys(&current_thread->spt, upage, f, ofs, read_bytes, zero_bytes, true, true);
+        if (!spte) {
+            goto MMAP_FAIL;
+        }
     }
 
-    mmapid_t mid;
+    mapid_t mid;
     if (!list_empty(&current_thread->mmap_table)) {
         mid = list_entry(list_back(&current_thread->mmap_table),
         struct mmap_entry, mmap_elem)->id + 1;
@@ -328,7 +331,7 @@ mmapid_t mmap(int fd, void *addr) {
     return -1;
 }
 
-void munmap(mmapid_t mapping) {
+void munmap(mapid_t mapping) {
     struct thread *current_thread = thread_current();
     struct mmap_entry *mme = get_mmap_entry(&current_thread->mmap_table, mapping);
     if (mme == NULL) {

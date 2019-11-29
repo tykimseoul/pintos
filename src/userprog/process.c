@@ -608,7 +608,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
             struct thread *current_thread = thread_current();
             ASSERT(pagedir_get_page(current_thread->pagedir, upage) == NULL); // no virtual page yet?
 
-            if (!make_spte_filesys(&current_thread->spt, upage, file, ofs, page_read_bytes, page_zero_bytes, writable))
+            if (!make_spte_filesys(&current_thread->spt, upage, file, ofs, page_read_bytes, page_zero_bytes, writable, false))
             {
                 if (DBG)
                     printf("failed to make a filesys spte\n");

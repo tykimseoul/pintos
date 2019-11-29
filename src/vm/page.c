@@ -57,7 +57,7 @@ struct supp_page_table_entry *make_spte(struct list *spt, void *frame, void *upa
 
 struct supp_page_table_entry *make_spte_filesys(struct list *spt, void *upage, struct file *file,
                                                 off_t offset, uint32_t read_bytes, uint32_t zero_bytes,
-                                                bool writable)
+                                                bool writable, bool from_syscall)
 {
     // if (DBG)
     //     printf("MAKING NEW SPTE FILESYS-------------\n");
@@ -74,7 +74,11 @@ struct supp_page_table_entry *make_spte_filesys(struct list *spt, void *upage, s
     }
 
     spte->user_vaddr = user_vaddr;
-    ASSERT(spte->user_vaddr != 0 && spte->user_vaddr != NULL);
+    if (from_syscall) {
+        if (spte->user_vaddr == 0 && spte->user_vaddr == NULL) return NULL;
+    } else {
+        ASSERT(spte->user_vaddr != 0 && spte->user_vaddr != NULL);
+    }
     if (DBG)
         printf("making spte(filesys) with uvaddr: %p\n", spte->user_vaddr);
 

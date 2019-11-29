@@ -9,18 +9,14 @@
 #include "../filesys/off_t.h"
 #include "../filesys/file.h"
 
-// static struct lock page_lock;
-
-enum page_status
-{
+enum page_status {
     IN_FRAME,
     IN_SWAP,
     FSYS,
     ALLZERO
 };
 
-struct supp_page_table_entry
-{
+struct supp_page_table_entry {
     uint32_t *user_vaddr;
     enum page_status status;
 
@@ -45,7 +41,7 @@ struct supp_page_table_entry *make_spte(struct list *spt, void *frame, void *upa
 
 struct supp_page_table_entry *make_spte_filesys(struct list *spt, void *page, struct file *file,
                                                 off_t offset, uint32_t read_bytes, uint32_t zero_bytes,
-                                                bool writable);
+                                                bool writable, bool from_syscall);
 
 struct supp_page_table_entry *add_to_supp_page_table(struct list *spt, struct frame_table_entry *fte, void *upage, bool writable);
 

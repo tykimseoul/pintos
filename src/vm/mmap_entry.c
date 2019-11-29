@@ -6,7 +6,7 @@
 #include "../vm/page.h"
 #include "../vm/swap.h"
 
-static struct mmap_entry *get_mmap_entry(struct list *mmap_table, mmapid_t id) {
+static struct mmap_entry *get_mmap_entry(struct list *mmap_table, mapid_t id) {
     struct list_elem *e;
     for (e = list_begin(mmap_table); e != list_end(mmap_table); e = list_next(e)) {
         struct mmap_entry *entry = list_entry(e,
