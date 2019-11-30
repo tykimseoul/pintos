@@ -4,8 +4,6 @@
 
 #include "swap.h"
 
-#define DBG false
-
 void swap_init()
 {
     swap_block = block_get_role(BLOCK_SWAP);
@@ -17,8 +15,6 @@ void swap_init()
 
 size_t swap_out_of_memory(void *kpage)
 {
-    if (DBG)
-        printf("swapping out of memory\n");
     ASSERT(swap_block && swap_map);
     lock_acquire(&swap_lock);
     size_t swap_slot = bitmap_scan_and_flip(swap_map, 0, 1, false);
@@ -34,8 +30,6 @@ size_t swap_out_of_memory(void *kpage)
 
 void swap_into_memory(size_t idx, void *kpage)
 {
-    if (DBG)
-        printf("swapping into memory\n");
     ASSERT(swap_block && swap_map);
     ASSERT(bitmap_test(swap_map, idx) != 0);
     lock_acquire(&swap_lock);

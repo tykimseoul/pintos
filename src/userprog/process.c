@@ -431,17 +431,6 @@ bool load(const char *file_name, void (**eip)(void), void **esp)
         printf("load: %s: open failed\n", file_name);
         goto done;
     }
-    // else
-    // {
-    //     //add to the file descriptor
-    //     for (int i = 2; i < FILE_MAX_COUNT; i++)
-    //     {
-    //         if (thread_current()->files[i] == NULL)
-    //         {
-    //             thread_current()->files[i] = file;
-    //         }
-    //     }
-    // }
 
     file_deny_write(file);
     t->exec_file = file;
@@ -691,7 +680,7 @@ static bool setup_stack(void **esp)
 #endif
     if (kpage == 0 || kpage == NULL)
     {
-        PANIC("WTF is this\n");
+        PANIC("Got a null frame from palloc_get_page\n");
     }
     struct supp_page_table_entry *spte = make_spte(&thread_current()->spt, kpage, PHYS_BASE - PGSIZE, true);
     if (spte)
@@ -729,9 +718,5 @@ bool install_page(void *upage, void *kpage, bool writable)
     /* Verify that there's not already a page at that virtual
        address, then map our page there. */
     bool success = (pagedir_get_page(t->pagedir, upage) == NULL && pagedir_set_page(t->pagedir, upage, kpage, writable));
-    // if (success)
-    //     printf("installating kpage: %p at upage: %p in pagedir: %p success\n", kpage, upage, t->pagedir);
-    // else
-    //     printf("installating kpage: %p at upage: %p in pagedir: %p failed\n", kpage, upage, t->pagedir);
     return success;
 }

@@ -205,10 +205,11 @@ INVALID_ACCESS:
         return;
     }
 
-    //    printf("Page fault at %p: %s error %s page in %s context.\n",
-    //           fault_addr,
-    //           not_present ? "not present" : "rights violation",
-    //           write ? "writing" : "reading",
-    //           user ? "user" : "kernel");
+    //This part of the code shouldn't be reached.
+    printf("Page fault at %p: %s error %s page in %s context.\n",
+           fault_addr,
+           not_present ? "not present" : "rights violation",
+           write ? "writing" : "reading",
+           user ? "user" : "kernel");
     kill(f);
 }

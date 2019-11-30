@@ -35,8 +35,6 @@ struct supp_page_table_entry
     uint32_t zero_bytes;
 };
 
-void init_page_sys();
-
 struct list *create_supp_page_table();
 
 struct supp_page_table_entry *make_spte(struct list *spt, void *frame, void *upage, bool writable);

@@ -7,11 +7,6 @@
 #include "../vm/swap.h"
 #include "../userprog/pagedir.h"
 
-void init_page_sys()
-{
-    // lock_init(&page_lock);
-}
-
 struct supp_page_table_entry *make_spte(struct list *spt, void *frame, void *upage, bool writable)
 {
     ASSERT(frame != 0);

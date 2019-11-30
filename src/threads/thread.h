@@ -111,9 +111,9 @@ struct thread
     struct semaphore exit_sema;         // separate semaphore for exiting
 #endif
 
-    struct list spt; /*supplementary page table of this thread*/
-    void *esp;                  /* esp of this thread */
-    struct list mmap_table;             //mmap table
+    struct list spt;        //supplementary page table
+    void *esp;              //user stack pointer used in kernel context
+    struct list mmap_table; //mmap table
 
     /* Owned by thread.c. */
     unsigned magic; /* Detects stack overflow. */
