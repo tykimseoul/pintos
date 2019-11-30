@@ -70,8 +70,7 @@ tid_t process_execute(const char *file_name)
 
         while (child != list_end(&(thread_current()->children)))
         {
-            t = list_entry(child,
-                           struct thread, child_elem);
+            t = list_entry(child, struct thread, child_elem);
             if (t->tid == tid)
             {
                 sema_down(&t->child_sema);
@@ -220,8 +219,7 @@ int process_wait(tid_t child_tid)
 
     while (child != list_end(&(thread_current()->children)))
     {
-        t = list_entry(child,
-                       struct thread, child_elem);
+        t = list_entry(child, struct thread, child_elem);
         if (t->tid == child_tid)
         {
             sema_down(&(t->child_sema));
@@ -241,22 +239,6 @@ void process_exit(void)
 {
     struct thread *cur = thread_current();
     uint32_t *pd;
-    if (cur->exec_file)
-    {
-        file_allow_write(cur->exec_file);
-        file_close(cur->exec_file);
-    }
-
-    /* Destroy the current process's page directory and switch back
-       to the kernel-only page directory. */
-
-    for (int i = 2; i < FILE_MAX_COUNT; i++)
-    {
-        if (cur->files[i] != NULL)
-        {
-            close(i);
-        }
-    }
 
 #ifdef VM
     struct list *mmap_table = &cur->mmap_table;
@@ -295,14 +277,32 @@ void process_exit(void)
         }
         }
 
+        uint32_t *pd = spte->owner->pagedir;
+        void *uaddr = spte->user_vaddr;
+        pagedir_clear_page(pd, uaddr);
         list_remove(&spte->page_elem);
         free(spte);
     }
 #endif
-    sema_up(&cur->child_sema);
-    sema_down(&cur->exit_sema);
+
+    if (cur->exec_file)
+    {
+        file_allow_write(cur->exec_file);
+        file_close(cur->exec_file);
+    }
+
+    for (int i = 2; i < FILE_MAX_COUNT; i++)
+    {
+        if (cur->files[i] != NULL)
+        {
+            close(i);
+        }
+    }
 
     pd = cur->pagedir;
+
+    /* Destroy the current process's page directory and switch back
+       to the kernel-only page directory. */
     if (pd != NULL)
     {
         /* Correct ordering here is crucial.  We must set
@@ -316,6 +316,8 @@ void process_exit(void)
         pagedir_activate(NULL);
         pagedir_destroy(pd);
     }
+    sema_up(&cur->child_sema);
+    sema_down(&cur->exit_sema);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -525,8 +527,8 @@ done:
     //so we keep it open until the thread terminates
     if (!success)
     {
+        file_close(t->exec_file);
         t->exec_file = NULL;
-        file_close(file);
     }
     return success;
 }
@@ -607,7 +609,8 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 #ifdef VM
-        bool lazy = true;
+
+        bool lazy = false;
         if (lazy)
         {
             // Lazy load
@@ -627,34 +630,25 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
             struct thread *current_thread = thread_current();
             ASSERT(pagedir_get_page(current_thread->pagedir, upage) == NULL); // no virtual page yet?
             void *frame = allocate_frame(upage, PAL_USER, writable);
-            struct supp_page_table_entry *victim_spte = make_spte(&current_thread->spt, frame, upage, writable);
-            if (!victim_spte)
+            struct supp_page_table_entry *spte = make_spte(&current_thread->spt, frame, upage, writable);
+            if (!spte)
             {
                 if (DBG)
                     printf("failed to make spte\n");
                 return false;
             }
+            ASSERT(spte->user_vaddr != 0 && spte->user_vaddr != NULL);
 
-            struct frame_table_entry *victim_fte = get_fte_by_spte(victim_spte);
+            if (frame == NULL)
+                return false;
 
-            //set the swap slot at index idx to be the data in the frame
-            // size_t idx = swap_out_of_memory(pagedir_get_page(current_thread->pagedir, get_spte_from_frame(victim_fte)->user_vaddr));
-            size_t idx = swap_out_of_memory(victim_fte->frame);
-            if (DBG)
-                printf("successfully swapped out of memory to index: %d\n", idx);
-            victim_spte->swap_slot = idx;
-
-            // if(DBG) printf("setting page status: in swap\n");
-            victim_spte->status = IN_SWAP;
-            lock_acquire(&frame_free_lock);
-            free_frame(victim_fte->frame);
-            lock_release(&frame_free_lock);
-            victim_spte->fte = NULL;
-            if (DBG)
-                printf("user_vaddr: %p\n", victim_spte->user_vaddr);
-
-            if (DBG)
-                printf("eviction success\n\n");
+            /* Load this page. */
+            if (file_read(file, frame, page_read_bytes) != (int)page_read_bytes)
+            {
+                palloc_free_page(frame);
+                return false;
+            }
+            memset(frame + page_read_bytes, 0, page_zero_bytes);
         }
 #else
         /* Get a page of memory. */

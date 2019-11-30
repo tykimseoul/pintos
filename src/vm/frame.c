@@ -179,8 +179,8 @@ void free_frame(void *kpage)
         }
         uint32_t *pd = fte->owner->pagedir;
         void *uaddr = spte->user_vaddr;
-        palloc_free_page(kpage);
         pagedir_clear_page(pd, uaddr);
+        palloc_free_page(kpage);
         if (DBG)
             printf("after freeing frame, uaddr: %p, %p\n", spte, spte->user_vaddr);
         free(fte);

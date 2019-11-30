@@ -37,8 +37,8 @@ void swap_into_memory(size_t idx, void *kpage)
     if (DBG)
         printf("swapping into memory\n");
     ASSERT(swap_block && swap_map);
-    lock_acquire(&swap_lock);
     ASSERT(bitmap_test(swap_map, idx) != 0);
+    lock_acquire(&swap_lock);
     bitmap_reset(swap_map, idx);
     for (size_t i = 0; i < SECTORS_PER_PAGE; i++)
     {
@@ -47,10 +47,11 @@ void swap_into_memory(size_t idx, void *kpage)
     lock_release(&swap_lock);
 }
 
-void free_swap(size_t idx){
+void free_swap(size_t idx)
+{
     ASSERT(swap_block && swap_map);
-    lock_acquire(&swap_lock);
     ASSERT(bitmap_test(swap_map, idx) != 0);
+    lock_acquire(&swap_lock);
     bitmap_reset(swap_map, idx);
     lock_release(&swap_lock);
 }
