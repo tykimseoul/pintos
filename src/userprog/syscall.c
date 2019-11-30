@@ -15,11 +15,12 @@
 static void syscall_handler(struct intr_frame *);
 
 static void can_i_read(void *uaddr, unsigned size);
-
 static void can_i_write(void *uaddr, unsigned size);
 
+static void load_and_pin_pages(void *buffer, size_t size);
+static void unpin_pages(void *buffer, size_t size);
+
 struct lock file_lock;
-#define DBG false
 
 void syscall_init(void)
 {
@@ -291,7 +292,13 @@ int read(int fd, void *buffer, unsigned size)
     {
         return 0;
     }
+#ifdef VM
+    load_and_pin_pages(buffer, size);
+#endif
     read_cnt = file_read(file, buffer, size);
+#ifdef VM
+    unpin_pages(buffer, size);
+#endif
     return (int)read_cnt;
 }
 
@@ -312,7 +319,14 @@ int write(int fd, const void *buffer, unsigned size)
     {
         struct file *writing_file = thread_current()->files[fd];
         check_file_validity(writing_file);
-        return file_write(writing_file, buffer, size);
+#ifdef VM
+        load_and_pin_pages(buffer, size);
+#endif
+        int size_written = file_write(writing_file, buffer, size);
+#ifdef VM
+        unpin_pages(buffer, size);
+#endif
+        return size_written;
     }
 }
 
@@ -472,5 +486,28 @@ static void can_i_write(void *uaddr, unsigned size)
         {
             exit(-1);
         }
+    }
+}
+
+static void load_and_pin_pages(void *buffer, size_t size)
+{
+    struct supp_page_table *spt = &thread_current()->spt;
+
+    for (void *upage = pg_round_down(buffer); upage < (buffer + size); upage += PGSIZE)
+    {
+        struct supp_page_table_entry *spte = get_spte(spt, upage);
+        if(load_page(spt, spte))
+            pin_page(spte);
+    }
+}
+
+static void unpin_pages(void *buffer, size_t size)
+{
+    struct supp_page_table *spt = &thread_current()->spt;
+
+    for (void *upage = pg_round_down(buffer); upage < (buffer + size); upage += PGSIZE)
+    {
+        struct supp_page_table_entry *spte = get_spte(spt, upage);
+        unpin_page(spte);
     }
 }

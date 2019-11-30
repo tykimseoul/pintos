@@ -9,14 +9,16 @@
 #include "../filesys/off_t.h"
 #include "../filesys/file.h"
 
-enum page_status {
+enum page_status
+{
     IN_FRAME,
     IN_SWAP,
     FSYS,
     ALLZERO
 };
 
-struct supp_page_table_entry {
+struct supp_page_table_entry
+{
     uint32_t *user_vaddr;
     enum page_status status;
 
@@ -49,6 +51,14 @@ struct supp_page_table_entry *get_spte(struct list *spt, void *upage);
 
 struct supp_page_table_entry *get_spte_from_fte(struct list *spt, struct frame_table_entry *fte);
 
+bool load_page(struct list *spt, struct supp_page_table_entry *spte);
+
 bool load_page_from_swap(struct list *spt, struct supp_page_table_entry *spte);
 
+bool load_page_from_filesys(struct supp_page_table_entry *spte);
+
 void free_page(struct supp_page_table_entry *spte);
+
+void pin_page(struct supp_page_table_entry *spte);
+
+void unpin_page(struct supp_page_table_entry *spte);

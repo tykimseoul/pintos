@@ -15,6 +15,7 @@ struct frame_table_entry
     void *frame;
     struct thread *owner;
     struct list_elem frame_elem;
+    bool pinned;
 };
 
 void init_frame_sys();
@@ -32,3 +33,9 @@ void free_frame(void *kpage);
 bool evict_frame();
 
 bool reclaim_frame(struct supp_page_table_entry *entry);
+
+void set_frame_pin(void *kpage, bool pin);
+
+void pin_frame(void *kpage);
+
+void unpin_frame(void *kpage);

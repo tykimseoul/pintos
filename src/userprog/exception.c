@@ -12,8 +12,6 @@
 
 #define MAX_STACK_SIZE (1 << 23)
 
-#define DBG false
-
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
@@ -164,19 +162,8 @@ static void page_fault(struct intr_frame *f)
     // section 4.3.3
     struct supp_page_table_entry *spte = get_spte(&current_thread->spt, upage);
 
-    if (DBG)
-        printf("\nPage fault at %p: %s error %s page in %s context.\n",
-               fault_addr,
-               not_present ? "not present" : "rights violation",
-               write ? "writing" : "reading",
-               user ? "user" : "kernel");
-    if (DBG)
-        printf("\nfault at upage: %p in thread: %d\n", upage, current_thread->tid);
-
     if (!not_present)
     {
-        if (DBG)
-            printf("goto invalid access\n");
         goto INVALID_ACCESS;
     }
 
@@ -189,108 +176,31 @@ static void page_fault(struct intr_frame *f)
         if (contiguous && in_stack)
         {
             //grow the stack
-            if (DBG)
-                printf("growing stack...\n");
             void *frame = allocate_frame(upage, PAL_USER | PAL_ZERO, true);
             struct supp_page_table_entry *spte = make_spte(&current_thread->spt, frame, upage, true);
             if (spte)
             {
-                if (DBG)
-                    printf("stack growth success\n");
+                unpin_page(spte);
                 return;
             }
         }
         //ungrowable region
-        // if (DBG)
-        // printf("ungrowable region: %p\n", fault_addr);
         exit(-1);
     }
 
-    if (spte->status == IN_SWAP)
+    if (load_page(&current_thread->spt, spte))
     {
-        if (DBG)
-            printf("loading from swap... upage: %p in thread: %d\n", upage, current_thread->tid);
-        if (load_page_from_swap(&current_thread->spt, spte))
-            return;
-    }
-
-    if (spte->status == FSYS)
-    {
-        //the data required is in the filesys and is being accessed for the first time. Load it.
-        if (DBG)
-            printf("loading from filesys... upage: %p in thread: %d\n", upage, current_thread->tid);
-        void *frame = allocate_frame(upage, PAL_USER | PAL_ZERO, spte->writable);
-        if (DBG)
-            printf("frame allocated: %p in thread: %d\n", frame, current_thread->tid);
-        if (!frame || frame == 0)
-        {
-            if (DBG)
-                printf("allocation failed\n");
-            exit(-1);
-        }
-
-        file_seek(spte->file, spte->ofs);
-        if (file_read(spte->file, frame, spte->read_bytes) != (off_t)spte->read_bytes)
-        {
-            if (DBG)
-                printf("failed to read file\n");
-            lock_acquire(&frame_free_lock);
-            list_remove(&get_fte_by_frame(frame)->frame_elem);
-            free(frame);
-            lock_release(&frame_free_lock);
-            exit(-1);
-        }
-        memset(frame + spte->read_bytes, 0, spte->zero_bytes);
-
-        if (DBG)
-            printf("installing page\n");
-        bool installed = install_page(upage, frame, spte->writable);
-        // bool installed = pagedir_get_page(current_thread->pagedir, upage) == NULL && pagedir_set_page(current_thread->pagedir, upage, frame, spte->writable);
-        if (!installed)
-        {
-            if (DBG)
-                printf("install failed\n");
-            free_page(spte);
-            exit(-1);
-        }
-
-        spte->fte = get_fte_by_frame(frame);
-        if (DBG)
-            printf("putting in frame: %p in  spte: %p with uvaddr: %p\n", spte->fte->frame, spte, spte->user_vaddr);
-
-        spte->status = IN_FRAME;
-        if (DBG)
-            printf("setting page status: in frame %d (in exception)\n", spte->status);
-        spte->dirty = false;
+        unpin_page(spte);
         return;
-    }
-
-    if (spte->status == IN_FRAME)
-    {
-        if (DBG)
-            printf("page fault at upage: %p\n", upage);
-        if (DBG)
-            printf("page fault occured but the page is in frame...\n");
-        if (DBG)
-            printf("this spte has frame: %p in spte: %p with uvaddr: %p\n", spte->fte->frame, spte, spte->user_vaddr);
-    }
-    if (spte->status == ALLZERO)
-    {
-        if (DBG)
-            printf("we never even use allzero wtf\n");
     }
 
 INVALID_ACCESS:
     if (user)
     {
-        if (DBG)
-            printf("invalid access\n");
         exit(-1);
     }
     else
     {
-        if (DBG)
-            printf("some kernel thing\n");
         (f->eax) = -1;
         return;
     }

@@ -25,8 +25,6 @@
 
 #define FILE_NAME_SIZE 256
 
-#define DBG false
-
 static thread_func start_process
     NO_RETURN;
 
@@ -619,8 +617,6 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
 
             if (!make_spte_filesys(&current_thread->spt, upage, file, ofs, page_read_bytes, page_zero_bytes, writable, false))
             {
-                if (DBG)
-                    printf("failed to make a filesys spte\n");
                 return false;
             }
         }
@@ -633,8 +629,6 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
             struct supp_page_table_entry *spte = make_spte(&current_thread->spt, frame, upage, writable);
             if (!spte)
             {
-                if (DBG)
-                    printf("failed to make spte\n");
                 return false;
             }
             ASSERT(spte->user_vaddr != 0 && spte->user_vaddr != NULL);
@@ -649,6 +643,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage, uint32_t 
                 return false;
             }
             memset(frame + page_read_bytes, 0, page_zero_bytes);
+            unpin_page(spte);
         }
 #else
         /* Get a page of memory. */
@@ -689,8 +684,6 @@ static bool setup_stack(void **esp)
     uint8_t *kpage;
     bool success = false;
 
-    if (DBG)
-        printf("making a page in setup stack...\n");
 #ifdef VM
     kpage = allocate_frame(PHYS_BASE - PGSIZE, PAL_USER | PAL_ZERO, true);
 #else
@@ -703,16 +696,13 @@ static bool setup_stack(void **esp)
     struct supp_page_table_entry *spte = make_spte(&thread_current()->spt, kpage, PHYS_BASE - PGSIZE, true);
     if (spte)
     {
-        if (DBG)
-            printf("SUCCESS making spte at %p allocated frame at: %p in setup_stack\n", spte, kpage);
         *esp = PHYS_BASE;
+        unpin_page(spte);
         success = true;
     }
     else
     {
 #ifdef VM
-        if (DBG)
-            printf("failed to allocate frame in setup stack\n");
         lock_acquire(&frame_free_lock);
         free_frame(kpage);
         lock_release(&frame_free_lock);
