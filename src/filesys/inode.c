@@ -420,12 +420,14 @@ static void free_indirect_inode(block_sector_t sector, int num_sectors, int dept
 
     for (int i = 0; i < length; i++) {
         int size = min(num_sectors, size_unit);
-        free_indirect_inode(&indirect_block[i], size, depth - 1);
+        free_indirect_inode(indirect_block[i], size, depth - 1);
         num_sectors -= size;
     }
 
     ASSERT(num_sectors == 0);
-    free_map_release(sector, 1);
+    if (sector != 0) {
+        free_map_release(sector, 1);
+    }
 }
 
 static bool free_inode(struct inode_disk *inode) {
@@ -436,7 +438,7 @@ static bool free_inode(struct inode_disk *inode) {
     int length = min(sectors, DIRECT_BLOCKS_COUNT);
 
     for (int i = 0; i < length; i++) {
-        free_map_release(&inode->direct_blocks[i], 1);
+        free_map_release(inode->direct_blocks[i], 1);
     }
     sectors -= 1;
 
