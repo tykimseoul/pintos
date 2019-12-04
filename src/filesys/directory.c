@@ -5,6 +5,7 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+#include "../threads/thread.h"
 
 /* A directory. */
 struct dir {
@@ -19,10 +20,42 @@ struct dir_entry {
     bool in_use;                        /* In use or free? */
 };
 
+bool parse_pathname(char *path, char *directory, char *filename) {
+    int len = strlen(path) + 1;
+    if (len <= 1) {
+        return false;
+    }
+    char *dir_copy = (char *) calloc(1, len);
+    strlcpy(dir_copy, path, len);
+    char *last_slash = strrchr(dir_copy, (int) '/');
+
+    if (!last_slash) {
+        if (len > NAME_MAX + 1) {
+            free(dir_copy);
+            return false;
+        }
+        *directory = '\0';
+        strlcpy(filename, path, len);
+    } else {
+        *last_slash = '\0';
+        int dir_len = strlen(dir_copy) + 1;
+        *last_slash = '/';
+
+        if (len - dir_len > NAME_MAX + 1) {
+            free(dir_copy);
+            return false;
+        }
+        strlcpy(directory, dir_copy, dir_len + 1);
+        strlcpy(filename, last_slash + 1, len - dir_len);
+    }
+    free(dir_copy);
+    return true;
+}
+
 /* Creates a directory with space for ENTRY_CNT entries in the
    given SECTOR.  Returns true if successful, false on failure. */
 bool dir_create(block_sector_t sector, size_t entry_cnt) {
-    return inode_create(sector, entry_cnt * sizeof(struct dir_entry));
+    return inode_create(sector, entry_cnt * sizeof(struct dir_entry), DIRECTORY);
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -44,6 +77,42 @@ struct dir *dir_open(struct inode *inode) {
    Return true if successful, false on failure. */
 struct dir *dir_open_root(void) {
     return dir_open(inode_open(ROOT_DIR_SECTOR));
+}
+
+struct dir *dir_open_path(const char *path) {
+    int length = strlen(path);
+    char *dir_copy = (char *) malloc(length + 1);
+    strlcpy(dir_copy, path, length + 1);
+
+    struct dir *current_dir;
+    if (path[0] == '/') {
+        current_dir = dir_open_root();
+    } else {
+        struct thread *current_thread = thread_current();
+        if (!current_thread->cwd) {
+            current_dir = dir_open_root();
+        } else {
+            current_dir = dir_reopen(current_thread->cwd);
+        }
+    }
+
+    char *token, *save_ptr;
+    for (token = strtok_r(dir_copy, "/", &save_ptr); token != NULL; token = strtok_r(NULL, "/", &save_ptr)) {
+        struct inode *inode = NULL;
+        if (!dir_lookup(current_dir, token, &inode)) {
+            dir_close(current_dir);
+            return NULL;
+        } else {
+            struct dir *next = dir_open(inode);
+            if (!next) {
+                dir_close(current_dir);
+                return NULL;
+            }
+            dir_close(current_dir);
+            current_dir = next;
+        }
+    }
+    return current_dir;
 }
 
 /* Opens and returns a new directory for the same inode as DIR.

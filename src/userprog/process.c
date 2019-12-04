@@ -289,6 +289,9 @@ void process_exit(void)
         file_close(cur->exec_file);
     }
 
+    if(cur->cwd)
+        dir_close(cur->cwd);
+
     for (int i = 2; i < FILE_MAX_COUNT; i++)
     {
         if (cur->files[i] != NULL)
@@ -499,6 +502,7 @@ bool load(const char *file_name, void (**eip)(void), void **esp)
         }
     }
 
+    t->cwd = dir_open_root();
     /* Set up stack. */
     if (!setup_stack(esp))
         goto done;

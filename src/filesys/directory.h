@@ -35,4 +35,10 @@ bool dir_remove(struct dir *, const char *name);
 
 bool dir_readdir(struct dir *, char name[NAME_MAX + 1]);
 
+bool parse_pathname(char *path, char *directory, char *filename);
+
+void split_path_filename(const char *path, char *directory, char *filename);
+
+struct dir *dir_open_path(const char *path);
+
 #endif /* filesys/directory.h */

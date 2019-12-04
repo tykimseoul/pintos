@@ -9,6 +9,7 @@
 #include "../filesys/filesys.h"
 #include "../threads/palloc.h"
 #include "../vm/mmap_entry.c"
+#include "../filesys/inode.h"
 
 #define USER_LOWER_BOUND 0x08048000
 
@@ -181,6 +182,22 @@ static void syscall_handler(struct intr_frame *f UNUSED)
         munmap(mapping);
         break;
     }
+        case SYS_CHDIR:{
+            char *dir = *((char *)f->esp + 1);
+            check_address_validity(dir);
+            lock_acquire(&file_lock);
+            f->eax = chdir(dir);
+            lock_release(&file_lock);
+            break;
+        }
+        case SYS_MKDIR:{
+            char *dir = *((char *)f->esp + 1);
+            check_address_validity(dir);
+            lock_acquire(&file_lock);
+            f->eax = mkdir(dir);
+            lock_release(&file_lock);
+            break;
+        }
     }
 }
 
@@ -215,7 +232,7 @@ int wait(pid_t pid)
 bool create(const char *file, unsigned initial_size)
 {
     check_file_validity(file);
-    bool success = filesys_create(file, initial_size);
+    bool success = filesys_create(file, initial_size, FILE);
     return success;
 }
 
@@ -441,6 +458,16 @@ void munmap(mapid_t mapping)
     file_close(mme->file);
     free(mme);
     lock_release(&file_lock);
+}
+
+bool chdir(const char *dir){
+    check_file_validity(dir);
+    return filesys_chdir(dir);
+}
+
+bool mkdir(const char *dir){
+    check_file_validity(dir);
+    return filesys_create(dir, 0, DIRECTORY);
 }
 
 void check_address_validity(void *address)

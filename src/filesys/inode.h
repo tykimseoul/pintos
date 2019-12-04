@@ -7,9 +7,14 @@
 
 struct bitmap;
 
+typedef enum {
+    DIRECTORY,
+    FILE
+}InodeType;
+
 void inode_init(void);
 
-bool inode_create(block_sector_t, off_t);
+bool inode_create(block_sector_t, off_t, InodeType type);
 
 struct inode *inode_open(block_sector_t);
 

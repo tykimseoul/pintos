@@ -7,6 +7,7 @@
 #include "filesys/inode.h"
 #include "filesys/directory.h"
 #include "../filesys/cache.h"
+#include "../threads/thread.h"
 
 /* Partition that contains the file system. */
 struct block *fs_device;
@@ -43,13 +44,16 @@ void filesys_done(void) {
    Returns true if successful, false otherwise.
    Fails if a file named NAME already exists,
    or if internal memory allocation fails. */
-bool filesys_create(const char *name, off_t initial_size) {
+bool filesys_create(const char *name, off_t initial_size, InodeType type) {
     block_sector_t inode_sector = 0;
-    struct dir *dir = dir_open_root();
+    char directory[strlen(name)];
+    char file_name[strlen(name)];
+    parse_pathname(name, directory, file_name);
+    struct dir *dir = dir_open_path(directory);
     bool success = (dir != NULL
                     && free_map_allocate(1, &inode_sector)
-                    && inode_create(inode_sector, initial_size)
-                    && dir_add(dir, name, inode_sector));
+                    && inode_create(inode_sector, initial_size, type)
+                    && dir_add(dir, file_name, inode_sector));
     if (!success && inode_sector != 0)
         free_map_release(inode_sector, 1);
     dir_close(dir);
@@ -63,11 +67,14 @@ bool filesys_create(const char *name, off_t initial_size) {
    Fails if no file named NAME exists,
    or if an internal memory allocation fails. */
 struct file *filesys_open(const char *name) {
-    struct dir *dir = dir_open_root();
+    char directory[strlen(name)];
+    char file_name[strlen(name)];
+    parse_pathname(name, directory, file_name);
+    struct dir *dir = dir_open_path(directory);
     struct inode *inode = NULL;
 
     if (dir != NULL)
-        dir_lookup(dir, name, &inode);
+        dir_lookup(dir, file_name, &inode);
     dir_close(dir);
 
     return file_open(inode);
@@ -78,11 +85,26 @@ struct file *filesys_open(const char *name) {
    Fails if no file named NAME exists,
    or if an internal memory allocation fails. */
 bool filesys_remove(const char *name) {
-    struct dir *dir = dir_open_root();
-    bool success = dir != NULL && dir_remove(dir, name);
+    char directory[strlen(name)];
+    char file_name[strlen(name)];
+    parse_pathname(name, directory, file_name);
+    struct dir *dir = dir_open_path(directory);
+    bool success = dir != NULL && dir_remove(dir, file_name);
     dir_close(dir);
 
     return success;
+}
+
+bool filesys_chdir(const char *dir_name) {
+    struct dir *dir = dir_open_path(dir_name);
+
+    if (!dir) {
+        return false;
+    } else {
+        dir_close(thread_current()->cwd);
+        thread_current()->cwd = dir_name;
+        return true;
+    }
 }
 
 /* Formats the file system. */

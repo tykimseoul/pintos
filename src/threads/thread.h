@@ -115,6 +115,8 @@ struct thread
     void *esp;              //user stack pointer used in kernel context
     struct list mmap_table; //mmap table
 
+    struct dir *cwd;        //current working directory of this thread
+
     /* Owned by thread.c. */
     unsigned magic; /* Detects stack overflow. */
 };
