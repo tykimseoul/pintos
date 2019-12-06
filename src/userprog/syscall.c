@@ -253,7 +253,10 @@ int open(const char *file) {
             file_deny_write(open_file);
         }
         struct inode *inode = file_get_inode(open_file);
-        if (inode && is_directory(inode)) {
+        if (!inode) {
+            return -1;
+        }
+        if (is_directory(inode)) {
             for (int i = 2; i < FILE_MAX_COUNT; i++) {
                 if (thread_current()->files[i] == NULL && thread_current()->directories[i] == NULL) {
                     thread_current()->directories[i] = dir_open(inode_reopen(inode));

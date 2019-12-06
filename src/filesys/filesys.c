@@ -116,7 +116,7 @@ bool filesys_chdir(const char *dir_name) {
         return false;
     } else {
         dir_close(thread_current()->cwd);
-        thread_current()->cwd = dir_name;
+        thread_current()->cwd = dir;
         return true;
     }
 }
