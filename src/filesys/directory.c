@@ -126,7 +126,6 @@ struct dir *dir_open_path(const char *path) {
     }
     if (is_removed(dir_get_inode(current_dir))) {
         dir_close(current_dir);
-        printf("trying to open removed directory\n");
         return NULL;
     }
     return current_dir;

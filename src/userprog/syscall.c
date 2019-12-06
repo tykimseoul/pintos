@@ -477,7 +477,11 @@ bool isdir(int fd) {
 }
 
 int inumber(int fd) {
-    return (int) inode_get_inumber(file_get_inode(thread_current()->files[fd]));
+    if (thread_current()->files[fd] == NULL) {
+        return (int) inode_get_inumber(file_get_inode(thread_current()->directories[fd]));
+    } else {
+        return (int) inode_get_inumber(file_get_inode(thread_current()->files[fd]));
+    }
 }
 
 void check_address_validity(void *address) {
