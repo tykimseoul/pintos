@@ -459,7 +459,7 @@ static bool free_inode(struct inode_disk *inode) {
     for (int i = 0; i < length; i++) {
         free_map_release(inode->direct_blocks[i], 1);
     }
-    sectors -= 1;
+    sectors -= length;
 
     length = min(sectors, INDIRECT_BLOCKS_PER_SECTOR);
     if (length > 0) {
