@@ -10,6 +10,8 @@
 #include "../threads/palloc.h"
 #include "../vm/mmap_entry.c"
 #include "../filesys/inode.h"
+#include "../filesys/file.h"
+#include "../filesys/directory.h"
 
 #define USER_LOWER_BOUND 0x08048000
 
@@ -168,7 +170,7 @@ static void syscall_handler(struct intr_frame *f UNUSED) {
             break;
         }
         case SYS_CHDIR: {
-            char *dir = *((char *) f->esp + 1);
+            char *dir = (char *) *((int *) f->esp + 1);
             check_address_validity(dir);
             lock_acquire(&file_lock);
             f->eax = chdir(dir);
@@ -176,10 +178,32 @@ static void syscall_handler(struct intr_frame *f UNUSED) {
             break;
         }
         case SYS_MKDIR: {
-            char *dir = *((char *) f->esp + 1);
+            char *dir = (char *) *((int *) f->esp + 1);
             check_address_validity(dir);
             lock_acquire(&file_lock);
             f->eax = mkdir(dir);
+            lock_release(&file_lock);
+            break;
+        }
+        case SYS_READDIR: {
+            int fd = *((int *) f->esp + 1);
+            char *name = (char *) (*((int *) f->esp + 2));
+            lock_acquire(&file_lock);
+            f->eax = readdir(fd, name);
+            lock_release(&file_lock);
+            break;
+        }
+        case SYS_ISDIR: {
+            int fd = *((int *) f->esp + 1);
+            lock_acquire(&file_lock);
+            f->eax = isdir(fd);
+            lock_release(&file_lock);
+            break;
+        }
+        case SYS_INUMBER: {
+            int fd = *((int *) f->esp + 1);
+            lock_acquire(&file_lock);
+            f->eax = inumber(fd);
             lock_release(&file_lock);
             break;
         }
@@ -228,10 +252,20 @@ int open(const char *file) {
         if (strcmp(thread_current()->name, file) == 0) {
             file_deny_write(open_file);
         }
-        for (int i = 2; i < FILE_MAX_COUNT; i++) {
-            if (thread_current()->files[i] == NULL) {
-                thread_current()->files[i] = open_file;
-                return i;
+        struct inode *inode = file_get_inode(open_file);
+        if (inode && is_directory(inode)) {
+            for (int i = 2; i < FILE_MAX_COUNT; i++) {
+                if (thread_current()->files[i] == NULL && thread_current()->directories[i] == NULL) {
+                    thread_current()->directories[i] = dir_open(inode_reopen(inode));
+                    return i;
+                }
+            }
+        } else {
+            for (int i = 2; i < FILE_MAX_COUNT; i++) {
+                if (thread_current()->files[i] == NULL && thread_current()->directories[i] == NULL) {
+                    thread_current()->files[i] = open_file;
+                    return i;
+                }
             }
         }
     }
@@ -319,9 +353,15 @@ unsigned tell(int fd) {
 
 void close(int fd) {
     struct file *closing_file = thread_current()->files[fd];
-    check_file_validity(closing_file);
-    file_close(closing_file);
-    thread_current()->files[fd] = NULL;
+    struct dir *closing_directory = thread_current()->directories[fd];
+    if (closing_file) {
+        file_close(closing_file);
+        thread_current()->files[fd] = NULL;
+    }
+    if (closing_directory) {
+        dir_close(closing_directory);
+        thread_current()->directories[fd] = NULL;
+    }
 }
 
 mapid_t mmap(int fd, void *addr) {
@@ -410,6 +450,31 @@ bool chdir(const char *dir) {
 bool mkdir(const char *dir) {
     check_file_validity(dir);
     return filesys_create(dir, 0, DIRECTORY);
+}
+
+bool readdir(int fd, char *filename) {
+    struct dir *reading_dir = thread_current()->directories[fd];
+    if (!reading_dir) {
+        return false;
+    }
+    struct inode *inode = dir_get_inode(reading_dir);
+    if (!inode) {
+        return false;
+    }
+
+    if (!is_directory(inode)) {
+        return false;
+    }
+    return dir_readdir(reading_dir, filename);
+}
+
+bool isdir(int fd) {
+    struct file *file = thread_current()->files[fd];
+    return file == NULL;
+}
+
+int inumber(int fd) {
+    return (int) inode_get_inumber(file_get_inode(thread_current()->files[fd]));
 }
 
 void check_address_validity(void *address) {

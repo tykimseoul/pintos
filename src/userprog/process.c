@@ -77,6 +77,11 @@ tid_t process_execute(const char *file_name)
                     list_remove(&t->child_elem);
                     return -1;
                 }
+                if (thread_current()->cwd) {
+                    t->cwd = dir_reopen(thread_current()->cwd);
+                } else {
+                    t->cwd = dir_open_root();
+                }
                 break;
             }
             child = list_next(child);
@@ -502,7 +507,6 @@ bool load(const char *file_name, void (**eip)(void), void **esp)
         }
     }
 
-    t->cwd = dir_open_root();
     /* Set up stack. */
     if (!setup_stack(esp))
         goto done;

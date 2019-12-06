@@ -116,6 +116,7 @@ struct thread
     struct list mmap_table; //mmap table
 
     struct dir *cwd;        //current working directory of this thread
+    struct dir *directories[FILE_MAX_COUNT];
 
     /* Owned by thread.c. */
     unsigned magic; /* Detects stack overflow. */

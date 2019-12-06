@@ -68,6 +68,14 @@ struct inode {
     struct inode_disk data;             /* Inode content. */
 };
 
+bool is_directory(const struct inode *inode) {
+    return inode->data.type == DIRECTORY;
+}
+
+bool is_removed(const struct inode *inode){
+    return inode->removed;
+}
+
 /* Returns the block device sector that contains byte offset POS
    within INODE.
    Returns -1 if INODE does not contain data for a byte at offset
@@ -115,7 +123,7 @@ bool inode_create(block_sector_t sector, off_t length, InodeType type) {
     disk_inode = calloc(1, sizeof *disk_inode);
     if (disk_inode != NULL) {
         size_t sectors = bytes_to_sectors(length);
-//        disk_inode->type = type;
+        disk_inode->type = type;
         disk_inode->length = length;
         disk_inode->magic = INODE_MAGIC;
         if (allocate_inode(disk_inode, disk_inode->length)) {
@@ -346,14 +354,20 @@ static void allocate_indirect_inode(block_sector_t *sector, int num_sectors, int
 
     if (depth == 0) {
         if (*sector == 0) {
-            free_map_allocate(1, sector);
+            bool success = free_map_allocate(1, sector);
+            if(!success){
+                PANIC("free map allocate failed 1\n");
+            }
             write_buffer_cache(*sector, empty_sector);
         }
         return;
     }
 
     if (*sector == 0) {
-        free_map_allocate(1, sector);
+        bool success = free_map_allocate(1, sector);
+        if(!success){
+            PANIC("free map allocate failed 2\n");
+        }
         write_buffer_cache(*sector, empty_sector);
     }
 
@@ -385,7 +399,10 @@ static bool allocate_inode(struct inode_disk *inode, off_t file_length) {
 
     for (int i = 0; i < length; i++) {
         if (inode->direct_blocks[i] == 0) {
-            free_map_allocate(1, &inode->direct_blocks[i]);
+            bool success = free_map_allocate(1, &inode->direct_blocks[i]);
+            if(!success){
+                PANIC("free map allocate failed 3\n");
+            }
             write_buffer_cache(inode->direct_blocks[i], empty_sector);
         }
     }

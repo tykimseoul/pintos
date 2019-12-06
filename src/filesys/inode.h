@@ -36,4 +36,8 @@ void inode_allow_write(struct inode *);
 
 off_t inode_length(const struct inode *);
 
+bool is_directory(const struct inode *inode);
+
+bool is_removed(const struct inode *inode);
+
 #endif /* filesys/inode.h */

@@ -39,4 +39,10 @@ bool chdir(const char *dir);
 
 bool mkdir(const char *dir);
 
+bool readdir(int fd, char *filename);
+
+bool isdir(int fd);
+
+int inumber(int fd);
+
 #endif /* userprog/syscall.h */

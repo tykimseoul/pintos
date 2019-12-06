@@ -3,7 +3,6 @@
 #include <string.h>
 #include <list.h>
 #include "filesys/filesys.h"
-#include "filesys/inode.h"
 #include "threads/malloc.h"
 #include "../threads/thread.h"
 
@@ -55,7 +54,20 @@ bool parse_pathname(char *path, char *directory, char *filename) {
 /* Creates a directory with space for ENTRY_CNT entries in the
    given SECTOR.  Returns true if successful, false on failure. */
 bool dir_create(block_sector_t sector, size_t entry_cnt) {
-    return inode_create(sector, entry_cnt * sizeof(struct dir_entry), DIRECTORY);
+    bool success = inode_create(sector, entry_cnt * sizeof(struct dir_entry), DIRECTORY);
+    if (!success) {
+        return success;
+    }
+
+    struct dir *dir = dir_open(inode_open(sector));
+    ASSERT(dir);
+    struct dir_entry entry;
+    entry.inode_sector = sector;
+    if (inode_write_at(dir->inode, &entry, sizeof entry, 0) != sizeof entry) {
+        success = false;
+    }
+    dir_close(dir);
+    return success;
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -64,7 +76,7 @@ struct dir *dir_open(struct inode *inode) {
     struct dir *dir = calloc(1, sizeof *dir);
     if (inode != NULL && dir != NULL) {
         dir->inode = inode;
-        dir->pos = 0;
+        dir->pos = sizeof(struct dir_entry); //leave space for parent directory
         return dir;
     } else {
         inode_close(inode);
@@ -81,7 +93,7 @@ struct dir *dir_open_root(void) {
 
 struct dir *dir_open_path(const char *path) {
     int length = strlen(path);
-    char *dir_copy = (char *) malloc(length + 1);
+    char dir_copy[length + 1];
     strlcpy(dir_copy, path, length + 1);
 
     struct dir *current_dir;
@@ -112,6 +124,11 @@ struct dir *dir_open_path(const char *path) {
             current_dir = next;
         }
     }
+    if (is_removed(dir_get_inode(current_dir))) {
+        dir_close(current_dir);
+        printf("trying to open removed directory\n");
+        return NULL;
+    }
     return current_dir;
 }
 
@@ -131,7 +148,18 @@ void dir_close(struct dir *dir) {
 
 /* Returns the inode encapsulated by DIR. */
 struct inode *dir_get_inode(struct dir *dir) {
+    ASSERT(dir);
     return dir->inode;
+}
+
+bool dir_is_empty(const struct dir *dir) {
+    struct dir_entry entry;
+    for (int ofs = sizeof(entry); inode_read_at(dir->inode, &entry, sizeof(entry), ofs) == sizeof(entry); ofs += sizeof(entry)) {
+        if (entry.in_use) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /* Searches DIR for a file with the given NAME.
@@ -147,8 +175,8 @@ static bool lookup(const struct dir *dir, const char *name,
     ASSERT(dir != NULL);
     ASSERT(name != NULL);
 
-    for (ofs = 0; inode_read_at(dir->inode, &e, sizeof e, ofs) == sizeof e;
-         ofs += sizeof e)
+    //start after parent directory
+    for (ofs = sizeof(e); inode_read_at(dir->inode, &e, sizeof e, ofs) == sizeof e; ofs += sizeof e) {
         if (e.in_use && !strcmp(name, e.name)) {
             if (ep != NULL)
                 *ep = e;
@@ -156,6 +184,7 @@ static bool lookup(const struct dir *dir, const char *name,
                 *ofsp = ofs;
             return true;
         }
+    }
     return false;
 }
 
@@ -170,10 +199,16 @@ bool dir_lookup(const struct dir *dir, const char *name,
     ASSERT(dir != NULL);
     ASSERT(name != NULL);
 
-    if (lookup(dir, name, &e, NULL))
+    if (strcmp(name, ".") == 0) {
+        *inode = inode_reopen(dir->inode);
+    } else if (strcmp(name, "..") == 0) {
+        inode_read_at(dir->inode, &e, sizeof(e), 0);
         *inode = inode_open(e.inode_sector);
-    else
+    } else if (lookup(dir, name, &e, NULL)) {
+        *inode = inode_open(e.inode_sector);
+    } else {
         *inode = NULL;
+    }
 
     return *inode != NULL;
 }
@@ -184,7 +219,7 @@ bool dir_lookup(const struct dir *dir, const char *name,
    Returns true if successful, false on failure.
    Fails if NAME is invalid (i.e. too long) or a disk or memory
    error occurs. */
-bool dir_add(struct dir *dir, const char *name, block_sector_t inode_sector) {
+bool dir_add(struct dir *dir, const char *name, block_sector_t inode_sector, InodeType type) {
     struct dir_entry e;
     off_t ofs;
     bool success = false;
@@ -193,12 +228,27 @@ bool dir_add(struct dir *dir, const char *name, block_sector_t inode_sector) {
     ASSERT(name != NULL);
 
     /* Check NAME for validity. */
-    if (*name == '\0' || strlen(name) > NAME_MAX)
+    if (*name == '\0' || strlen(name) > NAME_MAX) {
         return false;
+    }
 
     /* Check that NAME is not in use. */
-    if (lookup(dir, name, NULL, NULL))
+    if (lookup(dir, name, NULL, NULL)){
         goto done;
+    }
+
+    // change the first directory to the parent directory
+    if (type == DIRECTORY) {
+        struct dir *child = dir_open(inode_open(inode_sector));
+        if (!child)
+            goto done;
+        e.inode_sector = inode_get_inumber(dir_get_inode(dir));
+        if (inode_write_at(child->inode, &e, sizeof(e), 0) != sizeof(e)) {
+            dir_close(child);
+            goto done;
+        }
+        dir_close(child);
+    }
 
     /* Set OFS to offset of free slot.
        If there are no free slots, then it will be set to the
@@ -207,7 +257,7 @@ bool dir_add(struct dir *dir, const char *name, block_sector_t inode_sector) {
        inode_read_at() will only return a short read at end of file.
        Otherwise, we'd need to verify that we didn't get a short
        read due to something intermittent such as low memory. */
-    for (ofs = 0; inode_read_at(dir->inode, &e, sizeof e, ofs) == sizeof e;
+    for (ofs = sizeof(e); inode_read_at(dir->inode, &e, sizeof e, ofs) == sizeof e;
          ofs += sizeof e)
         if (!e.in_use)
             break;
@@ -242,6 +292,14 @@ bool dir_remove(struct dir *dir, const char *name) {
     inode = inode_open(e.inode_sector);
     if (inode == NULL)
         goto done;
+
+    if (is_directory(inode)) {
+        struct dir *to_remove = dir_open(inode);
+        bool is_emtpy = dir_is_empty(to_remove);
+        dir_close(to_remove);
+        if (!is_emtpy)
+            goto done;
+    }
 
     /* Erase directory entry. */
     e.in_use = false;
