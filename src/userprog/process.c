@@ -77,6 +77,11 @@ tid_t process_execute(const char *file_name)
                     list_remove(&t->child_elem);
                     return -1;
                 }
+                if (thread_current()->cwd) {
+                    t->cwd = dir_reopen(thread_current()->cwd);
+                } else {
+                    t->cwd = dir_open_root();
+                }
                 break;
             }
             child = list_next(child);
@@ -288,6 +293,9 @@ void process_exit(void)
         file_allow_write(cur->exec_file);
         file_close(cur->exec_file);
     }
+
+    if(cur->cwd)
+        dir_close(cur->cwd);
 
     for (int i = 2; i < FILE_MAX_COUNT; i++)
     {
